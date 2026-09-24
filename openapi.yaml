@@ -1,0 +1,251 @@
+openapi: 3.0.3
+info:
+  title: System One Decision Service
+  version: 0.1.0
+servers:
+  - url: http://localhost:8002
+paths:
+  /v1/health:
+    get:
+      summary: Health check
+      responses:
+        '200':
+          description: ok
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
+  /v1/decide:
+    post:
+      summary: Evaluate one or more questions against a shared state
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DecisionRequest'
+      responses:
+        '200':
+          description: Decision results
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DecisionResponse'
+        '400':
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '422':
+          description: Unprocessable entity
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /v1/calibrate:
+    post:
+      summary: Fit a temperature scalar for a question type using NLL
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CalibrationRequest'
+      responses:
+        '200':
+          description: Calibration result
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CalibrationResponse'
+        '400':
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '422':
+          description: Unprocessable entity
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+components:
+  schemas:
+    Error:
+      type: object
+      required: [detail]
+      properties:
+        detail:
+          oneOf:
+            - type: string
+            - type: array
+              items:
+                type: object
+      additionalProperties: true
+    HealthResponse:
+      type: object
+      required: [status, version]
+      properties:
+        status:
+          type: string
+          enum: [ok]
+        version:
+          type: string
+    Question:
+      oneOf:
+        - $ref: '#/components/schemas/ChoiceQuestion'
+        - $ref: '#/components/schemas/ScoreQuestion'
+        - $ref: '#/components/schemas/NoulQuestion'
+    ChoiceQuestion:
+      type: object
+      required: [type, prompt, options]
+      properties:
+        type:
+          type: string
+          enum: [choice]
+        prompt:
+          type: string
+        options:
+          type: object
+          additionalProperties:
+            type: string
+      additionalProperties: false
+    ScoreQuestion:
+      type: object
+      required: [type, prompt, min, max]
+      properties:
+        type:
+          type: string
+          enum: [score]
+        prompt:
+          type: string
+        min:
+          type: integer
+        max:
+          type: integer
+        labels:
+          type: array
+          items:
+            type: integer
+      additionalProperties: false
+    NoulQuestion:
+      type: object
+      required: [type, prompt]
+      properties:
+        type:
+          type: string
+          enum: [noul]
+        prompt:
+          type: string
+      additionalProperties: false
+    DecisionRequest:
+      type: object
+      required: [state, questions]
+      properties:
+        state:
+          type: string
+          minLength: 1
+        questions:
+          type: object
+          additionalProperties:
+            $ref: '#/components/schemas/Question'
+    ChoiceAnswer:
+      type: object
+      required: [type, value, probabilities, confidence]
+      properties:
+        type:
+          type: string
+          enum: [choice]
+        value:
+          type: string
+        probabilities:
+          type: object
+          additionalProperties:
+            type: number
+        confidence:
+          type: number
+    ScoreAnswer:
+      type: object
+      required: [type, value, probabilities, confidence]
+      properties:
+        type:
+          type: string
+          enum: [score]
+        value:
+          type: integer
+        probabilities:
+          type: object
+          additionalProperties:
+            type: number
+        confidence:
+          type: number
+    NoulAnswer:
+      type: object
+      required: [type, value, confidence]
+      properties:
+        type:
+          type: string
+          enum: [noul]
+        value:
+          type: number
+          minimum: 0
+          maximum: 1
+        confidence:
+          type: number
+          minimum: 0
+          maximum: 1
+    DecisionResponse:
+      type: object
+      required: [results]
+      properties:
+        results:
+          type: object
+          additionalProperties:
+            oneOf:
+              - $ref: '#/components/schemas/ChoiceAnswer'
+              - $ref: '#/components/schemas/ScoreAnswer'
+              - $ref: '#/components/schemas/NoulAnswer'
+    CalibrationExample:
+      type: object
+      required: [state, question, label]
+      properties:
+        state:
+          type: string
+        question:
+          $ref: '#/components/schemas/Question'
+        label:
+          oneOf:
+            - type: string
+            - type: integer
+            - type: number
+    CalibrationRequest:
+      type: object
+      required: [question_type, examples]
+      properties:
+        question_type:
+          type: string
+          enum: [choice, score, noul]
+        examples:
+          type: array
+          minItems: 50
+          items:
+            $ref: '#/components/schemas/CalibrationExample'
+    CalibrationResponse:
+      type: object
+      required: [question_type, n_examples, temperature, ece_before, ece_after, reliability_diagram]
+      properties:
+        question_type:
+          type: string
+          enum: [choice, score, noul]
+        n_examples:
+          type: integer
+        temperature:
+          type: number
+        ece_before:
+          type: number
+        ece_after:
+          type: number
+        reliability_diagram:
+          type: object

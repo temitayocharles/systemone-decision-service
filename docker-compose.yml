@@ -1,0 +1,69 @@
+services:
+  ollama:
+    image: ollama/ollama:latest
+    container_name: systemone-ollama
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama-data:/root/.ollama
+    healthcheck:
+      test: ["CMD", "ollama", "list"]
+      interval: 10s
+      timeout: 10s
+      retries: 12
+      start_period: 20s
+
+  rag:
+    build:
+      context: .
+      dockerfile: rag/Dockerfile
+    container_name: systemone-rag
+    ports:
+      - "8001:8001"
+    environment:
+      LLM_PROVIDER: ollama
+      LLM_MODEL: qwen2.5:3b
+      EMBED_MODEL: nomic-embed-text
+      CHROMA_HOST: chroma
+      CHROMA_PORT: "8000"
+      OLLAMA_HOST: http://ollama:11434
+    depends_on:
+      chroma:
+        condition: service_started
+      ollama:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8001/v1/health').read()"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
+
+  chroma:
+    image: chromadb/chroma:latest
+    container_name: systemone-chroma
+    ports:
+      - "8000:8000"
+    volumes:
+      - chroma-data:/chroma/chroma
+
+  decide:
+    build:
+      context: .
+      dockerfile: decide/Dockerfile
+    container_name: systemone-decide
+    ports:
+      - "8002:8002"
+    environment:
+      APP_PORT: "8002"
+      APP_VERSION: 0.1.0
+      TEMPERATURE: "1.0"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8002/v1/health').read()"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  chroma-data:
+  ollama-data:
