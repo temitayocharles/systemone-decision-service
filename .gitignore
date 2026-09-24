@@ -1,0 +1,32 @@
+# Local Python environments
+.venv/
+venv/
+env/
+
+# Python bytecode and caches
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Coverage and test output
+.coverage
+.coverage.*
+htmlcov/
+coverage.xml
+
+# Local configuration and secrets
+.env
+.env.*
+!.env.example
+
+# Local vector-store data
+.chroma/
+
+# Logs and local runtime output
+*.log
+
+# macOS metadata
+.DS_Store
