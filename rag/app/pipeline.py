@@ -25,6 +25,18 @@ class RAGPipeline:
         self.store.add_documents(collection_name, chunks, embeddings)
         return chunks
 
+    def retrieve(
+        self, collection_name: str, question: str, top_k: int = 5
+    ) -> Dict[str, Any]:
+        """Raw retrieval: the same chunks /v1/query would use, without generation.
+
+        Exists so downstream consumers (like the decision layer) can work from
+        the retrieved evidence directly instead of reusing generated answers.
+        """
+        q_embedding = self.embedding_client.embed(question)
+        matches = self.store.query(collection_name, q_embedding, top_k)
+        return {"chunks": matches}
+
     def query(self, collection_name: str, question: str, top_k: int = 5) -> Dict[str, Any]:
         q_embedding = self.embedding_client.embed(question)
         matches = self.store.query(collection_name, q_embedding, top_k)

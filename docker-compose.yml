@@ -57,7 +57,16 @@ services:
     environment:
       APP_PORT: "8002"
       APP_VERSION: 0.1.0
-      TEMPERATURE: "1.0"
+      # Model provider (OpenAI-compatible chat-completions with logprobs).
+      # Without DECIDE_API_KEY the service answers 502 instead of guessing.
+      DECIDE_BASE_URL: ${DECIDE_BASE_URL:-https://integrate.api.nvidia.com/v1}
+      DECIDE_API_KEY: ${DECIDE_API_KEY:-}
+      DECIDE_MODEL: ${DECIDE_MODEL:-meta/llama-3.1-70b-instruct}
+      DECIDE_TIMEOUT_S: ${DECIDE_TIMEOUT_S:-60}
+      DECIDE_MAX_PARALLEL: ${DECIDE_MAX_PARALLEL:-8}
+      DECIDE_DATA_DIR: /app/decide/data
+    volumes:
+      - decide-data:/app/decide/data
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8002/v1/health').read()"]
       interval: 10s
@@ -67,3 +76,4 @@ services:
 volumes:
   chroma-data:
   ollama-data:
+  decide-data:

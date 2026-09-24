@@ -1,146 +1,290 @@
+"""Real decision engine: typed answers with probabilities from model logprobs.
+
+How it works: for each question the model is asked to emit exactly one
+label token (a digit for choice/score, YES/NO for noul). We request logprobs
+from an OpenAI-compatible chat-completions endpoint, read the logits the
+model assigned to each label token, and apply softmax(logits / T) where T
+is the temperature fitted by /v1/calibrate.
+
+What this engine will NOT do:
+- It never invents probabilities. If the provider is not configured or does
+  not return logprobs, it raises EngineError and the API answers 502.
+- It never floors or boosts confidence. The numbers are the model's own
+  distribution, temperature-scaled, nothing else.
+"""
 from __future__ import annotations
 
+import asyncio
 import math
-import re
-from typing import Any, Dict, Iterable, List
+from typing import Any, Dict, List, Optional
 
-import numpy as np
+import httpx
 
-from .config import TEMPERATURE
+from . import config
+from .calibration import load_temperatures
+
+
+class EngineError(RuntimeError):
+    """The provider failed or refused to return logprobs. Never fake it."""
+
+
+def _softmax(logits: List[float], temperature: float) -> List[float]:
+    t = max(temperature, 1e-6)
+    scaled = [x / t for x in logits]
+    m = max(scaled)
+    exps = [math.exp(x - m) for x in scaled]
+    total = sum(exps)
+    return [e / total for e in exps]
+
+
+def _token_variants(label: str) -> List[str]:
+    # Tokenizers commonly emit a leading space on the first token.
+    return [label, " " + label, "\n" + label]
 
 
 class DecisionEngine:
-    def __init__(self) -> None:
-        self.temperature = TEMPERATURE
+    def __init__(self, temperatures: Optional[Dict[str, float]] = None) -> None:
+        self.temperatures = temperatures if temperatures is not None else load_temperatures()
+        self._client: Optional[httpx.AsyncClient] = None
+        self._sem = asyncio.Semaphore(config.MAX_PARALLEL)
 
-    def _softmax(self, values: Iterable[float], temperature: float | None = None) -> Dict[str, float]:
-        arr = np.asarray(list(values), dtype=float)
-        if arr.size == 0:
-            return {}
-        scale = max(float(temperature or self.temperature), 1e-8)
-        shifted = arr - np.max(arr)
-        exps = np.exp(shifted / scale)
-        total = float(np.sum(exps))
-        if total == 0:
-            uniform = 1.0 / len(arr)
-            return {str(i): float(uniform) for i in range(len(arr))}
-        probs = exps / total
-        best_idx = int(np.argmax(probs))
-        if float(probs[best_idx]) < 0.95:
-            probs = probs.astype(float)
-            probs[best_idx] += 0.95 - float(probs[best_idx])
-            probs /= np.sum(probs)
-        return {str(i): float(v) for i, v in enumerate(probs)}
+    def temperature_for(self, question_type: str) -> float:
+        return float(self.temperatures.get(question_type, 1.0))
 
-    def _tokenize(self, text: str) -> set[str]:
-        return {token for token in re.findall(r"[a-z0-9]+", text.lower()) if token}
+    def reload_temperatures(self) -> None:
+        self.temperatures = load_temperatures()
 
-    def _normalize_choice_probs(self, scores: Iterable[float]) -> Dict[str, float]:
-        values = list(scores)
-        return self._softmax(values, temperature=max(self.temperature * 0.5, 0.2))
+    async def _client_or_raise(self) -> httpx.AsyncClient:
+        if not config.provider_configured():
+            raise EngineError(
+                "DECIDE_API_KEY is not set. The decision service needs a "
+                "logprob-capable model provider; it will not guess."
+            )
+        if self._client is None:
+            self._client = httpx.AsyncClient(
+                base_url=config.BASE_URL.rstrip("/"),
+                timeout=config.REQUEST_TIMEOUT_S,
+            )
+        return self._client
 
-    def evaluate_choice(self, options: Dict[str, str], prompt: str, state: str) -> Dict[str, Any]:
+    async def _logprobs_for(
+        self, prompt: str, usage: Dict[str, int]
+    ) -> Dict[str, float]:
+        """Ask the model for one label token; return {token: logprob}.
+
+        Real provider token counts are accumulated into `usage` so callers
+        can report measured cost instead of estimating it.
+        """
+        client = await self._client_or_raise()
+        body = {
+            "model": config.MODEL,
+            "messages": [{"role": "user", "content": prompt}],
+            "max_tokens": 1,
+            "temperature": 0,
+            "logprobs": True,
+            "top_logprobs": 20,
+        }
+        headers = {"Authorization": f"Bearer {config.API_KEY}"}
+        try:
+            resp = await client.post("/chat/completions", json=body, headers=headers)
+        except httpx.HTTPError as exc:
+            raise EngineError(f"provider request failed: {exc}") from exc
+        if resp.status_code != 200:
+            raise EngineError(
+                f"provider returned HTTP {resp.status_code}: {resp.text[:300]}"
+            )
+        try:
+            data = resp.json()
+            choice = data["choices"][0]
+            top = choice["logprobs"]["content"][0]["top_logprobs"]
+        except (KeyError, IndexError, TypeError) as exc:
+            raise EngineError(
+                "provider did not return token logprobs; refusing to invent probabilities"
+            ) from exc
+        for key in ("prompt_tokens", "completion_tokens", "total_tokens"):
+            value = (data.get("usage") or {}).get(key)
+            if isinstance(value, int):
+                usage[key] = usage.get(key, 0) + value
+        return {item["token"]: float(item["logprob"]) for item in top}
+
+    def _logits_for_labels(self, observed: Dict[str, float], labels: List[str]) -> List[float]:
+        floor = min(observed.values()) - 10.0 if observed else -10.0
+        logits = []
+        for label in labels:
+            best = floor
+            for variant in _token_variants(label):
+                if variant in observed and observed[variant] > best:
+                    best = observed[variant]
+            logits.append(best)
+        return logits
+
+    async def _decide_labels(
+        self,
+        prompt: str,
+        labels: List[str],
+        question_type: str,
+        usage: Dict[str, int],
+    ) -> List[float]:
+        async with self._sem:
+            observed = await self._logprobs_for(prompt, usage)
+        logits = self._logits_for_labels(observed, labels)
+        return _softmax(logits, self.temperature_for(question_type))
+
+    async def _evaluate_digit_labels(
+        self,
+        prompt: str,
+        candidates: List[str],
+        question_type: str,
+        usage: Dict[str, int],
+    ) -> List[float]:
+        """Softmax over digit labels 1..len(candidates).
+
+        `candidates[i]` is the human-readable text for candidate i, shown in
+        the prompt. For more than 9 candidates we run a tournament: each round
+        presents at most 9 candidates relabeled 1..k (single tokens the model
+        can actually emit) and winners advance. Tournament probabilities are
+        approximate; this is documented, not hidden.
+        """
+        n = len(candidates)
+
+        async def round_probs(
+            base_prompt: str, indices: List[int]
+        ) -> List[float]:
+            lines = [f"{i + 1}. {candidates[c]}" for i, c in enumerate(indices)]
+            round_prompt = (
+                base_prompt
+                + "\n\nCandidates:\n"
+                + "\n".join(lines)
+                + "\n\nAnswer with only the number of the best candidate. No other text."
+            )
+            return await self._decide_labels(
+                round_prompt,
+                [str(i + 1) for i in range(len(indices))],
+                question_type,
+                usage,
+            )
+
+        contenders = list(range(n))
+        while len(contenders) > 9:
+            winners: List[int] = []
+            for start in range(0, len(contenders), 9):
+                group = contenders[start : start + 9]
+                probs = await round_probs(prompt, group)
+                winners.append(group[max(range(len(group)), key=lambda i: probs[i])])
+            contenders = winners
+        final_probs = await round_probs(prompt, contenders)
+        result = [0.0] * n
+        for i, c in enumerate(contenders):
+            result[c] = final_probs[i]
+        total = sum(result)
+        return [p / total for p in result] if total > 0 else [1.0 / n] * n
+
+    async def evaluate_choice(
+        self,
+        options: Dict[str, str],
+        prompt: str,
+        state: str,
+        usage: Optional[Dict[str, int]] = None,
+    ) -> Dict[str, Any]:
         keys = list(options.keys())
-        state_tokens = self._tokenize(state)
-        prompt_tokens = self._tokenize(prompt)
-        scores = []
-        for key in keys:
-            option_text = f"{key} {options[key]}".lower()
-            option_tokens = self._tokenize(option_text)
-            score = 0.0
-            for token in option_tokens:
-                if token in state_tokens:
-                    score += 2.5
-                if token in prompt_tokens:
-                    score += 1.0
-            if any(term in state.lower() for term in ["memory", "oom", "eviction", "restart", "crash", "kill"]):
-                if "memory" in key.lower() or "oom" in key.lower() or "disk" in key.lower():
-                    score += 4.0
-            if any(term in state.lower() for term in ["config", "manifest", "startup", "deploy", "invalid"]):
-                if "config" in key.lower() or "manifest" in key.lower() or "startup" in key.lower():
-                    score += 4.0
-            if any(term in state.lower() for term in ["network", "latency", "dns", "dependency", "timeout"]):
-                if "network" in key.lower() or "dependency" in key.lower():
-                    score += 4.0
-            if any(term in state.lower() for term in ["token", "vault", "auth", "secret"]):
-                if "token" in key.lower() or "auth" in key.lower():
-                    score += 4.0
-            if score == 0.0:
-                if "config" in key.lower() or "manifest" in key.lower() or "startup" in key.lower():
-                    score += 2.5
-                elif "memory" in key.lower() and "oom" in state.lower():
-                    score += 2.5
-            scores.append(score)
-        probs = self._normalize_choice_probs(scores)
-        best_key = max(keys, key=lambda k: probs.get(str(keys.index(k)), 0.0))
-        probability_for_best = float(probs.get(str(keys.index(best_key)), 0.0))
-        return {"type": "choice", "value": best_key, "probabilities": {k: float(probs.get(str(i), 0.0)) for i, k in enumerate(keys)}, "confidence": probability_for_best}
+        if len(keys) < 2:
+            raise EngineError("choice needs at least 2 options")
+        usage = usage if usage is not None else {}
+        base_prompt = f"State:\n{state}\n\nQuestion: {prompt}"
+        probs = await self._evaluate_digit_labels(
+            base_prompt, [options[k] for k in keys], "choice", usage
+        )
+        best = max(range(len(keys)), key=lambda i: probs[i])
+        return {
+            "type": "choice",
+            "value": keys[best],
+            "probabilities": {k: float(probs[i]) for i, k in enumerate(keys)},
+            "confidence": float(probs[best]),
+        }
 
-    def evaluate_score(self, prompt: str, state: str, min_value: int, max_value: int, labels: List[int] | None = None) -> Dict[str, Any]:
-        points = list(range(min_value, max_value + 1))
-        state_lower = state.lower()
-        prompt_lower = prompt.lower()
-        mid = (min_value + max_value) / 2.0
-        severity_terms = ["critical", "outage", "failure", "fail", "error", "emergency", "lost", "degraded", "oom", "breach"]
-        calm_terms = ["healthy", "normal", "routine", "ok", "stable", "success"]
-        raw_scores = []
-        for point in points:
-            score = 0.0
-            delta = abs(point - mid)
-            if any(term in state_lower for term in severity_terms) and point >= mid:
-                score += (point - mid + 1.0) * 3.0
-            if any(term in state_lower for term in calm_terms) and point <= mid:
-                score += (mid - point + 1.0) * 3.0
-            if "critical" in prompt_lower and point >= mid:
-                score += 2.5
-            if "risk" in state_lower and point >= mid:
-                score += 2.0
-            if str(point) in state_lower:
-                score += 1.5
-            raw_scores.append(score)
-        probs = self._softmax(raw_scores, temperature=max(self.temperature * 0.45, 0.25))
-        best_point = max(points, key=lambda p: probs.get(str(points.index(p)), 0.0))
-        probability_for_best = float(probs.get(str(points.index(best_point)), 0.0))
-        return {"type": "score", "value": best_point, "probabilities": {str(p): float(probs.get(str(i), 0.0)) for i, p in enumerate(points)}, "confidence": probability_for_best}
-
-    def evaluate_noul(self, prompt: str, state: str) -> Dict[str, Any]:
-        prompt_lower = prompt.lower()
-        state_lower = state.lower()
-        positive_terms = ["error", "fail", "critical", "loss", "alert", "sensitive", "secret", "unsafe", "oom", "outage", "degraded", "breach"]
-        negative_terms = ["ok", "healthy", "success", "normal", "safe", "routine", "expected", "stable", "recovered", "operating"]
-
-        positive_state = sum(1 for term in positive_terms if term in state_lower)
-        negative_state = sum(1 for term in negative_terms if term in state_lower)
-        positive_prompt = sum(1 for term in positive_terms if term in prompt_lower)
-        negative_prompt = sum(1 for term in negative_terms if term in prompt_lower)
-
-        state_score = 3.0 * positive_state - 3.0 * negative_state
-        prompt_score = 0.6 * positive_prompt - 0.6 * negative_prompt
-        score = state_score + prompt_score
-
-        if positive_state == 0 and negative_state == 0 and positive_prompt == 0 and negative_prompt == 0:
-            value = 0.5
-        elif score >= 1.5:
-            value = 0.97
-        elif score <= -1.5:
-            value = 0.03
+    async def evaluate_score(
+        self,
+        prompt: str,
+        state: str,
+        min_value: int,
+        max_value: int,
+        labels: Optional[List[int]] = None,
+        usage: Optional[Dict[str, int]] = None,
+    ) -> Dict[str, Any]:
+        # labels, when provided, is the explicit candidate point set
+        # (a subset of min..max per the contract). Otherwise use the full range.
+        if labels:
+            points = sorted(set(int(v) for v in labels))
+            if any(p < min_value or p > max_value for p in points):
+                raise EngineError("score labels must be within min/max")
         else:
-            value = 0.5
+            points = list(range(min_value, max_value + 1))
+        usage = usage if usage is not None else {}
+        base_prompt = (
+            f"State:\n{state}\n\nQuestion: {prompt}\n"
+            f"Rate on this scale: {min_value} to {max_value}."
+        )
+        probs = await self._evaluate_digit_labels(
+            base_prompt, [str(p) for p in points], "score", usage
+        )
+        best = max(range(len(points)), key=lambda i: probs[i])
+        return {
+            "type": "score",
+            "value": points[best],
+            "probabilities": {str(p): float(probs[i]) for i, p in enumerate(points)},
+            "confidence": float(probs[best]),
+        }
 
-        confidence = float(max(value, 1.0 - value))
-        return {"type": "noul", "value": value, "confidence": confidence}
+    async def evaluate_noul(
+        self,
+        prompt: str,
+        state: str,
+        usage: Optional[Dict[str, int]] = None,
+    ) -> Dict[str, Any]:
+        usage = usage if usage is not None else {}
+        noul_prompt = (
+            f"State:\n{state}\n\nProposition: {prompt}\n"
+            "Is the proposition true? Answer with only YES or NO. No other text."
+        )
+        probs = await self._decide_labels(noul_prompt, ["YES", "NO"], "noul", usage)
+        p_true = float(probs[0])
+        return {
+            "type": "noul",
+            "value": p_true,
+            "confidence": float(max(p_true, 1.0 - p_true)),
+        }
 
-    def decide(self, state: str, questions: Dict[str, Any]) -> Dict[str, Any]:
-        results: Dict[str, Any] = {}
-        for question_id, question in questions.items():
-            payload = question.model_dump() if hasattr(question, "model_dump") else dict(question)
-            qtype = payload["type"]
+    async def decide(
+        self, state: str, questions: Dict[str, Any]
+    ) -> tuple:
+        """Evaluate all questions in parallel.
+
+        Returns (results, usage): results maps question id to its answer,
+        usage accumulates the provider's real reported token counts.
+        """
+        usage: Dict[str, int] = {}
+
+        async def one(qid: str, q: Dict[str, Any]) -> tuple:
+            qtype = q["type"]
             if qtype == "choice":
-                results[question_id] = self.evaluate_choice(payload["options"], payload["prompt"], state)
-            elif qtype == "score":
-                results[question_id] = self.evaluate_score(payload["prompt"], state, int(payload["min"]), int(payload["max"]), payload.get("labels"))
-            elif qtype == "noul":
-                results[question_id] = self.evaluate_noul(payload["prompt"], state)
-            else:
-                raise ValueError(f"Unsupported question type: {qtype}")
-        return {"results": results}
+                return qid, await self.evaluate_choice(
+                    q["options"], q["prompt"], state, usage
+                )
+            if qtype == "score":
+                return qid, await self.evaluate_score(
+                    q["prompt"], state, int(q["min"]), int(q["max"]),
+                    q.get("labels"), usage,
+                )
+            if qtype == "noul":
+                return qid, await self.evaluate_noul(q["prompt"], state, usage)
+            raise EngineError(f"unsupported question type: {qtype}")
+
+        pairs = await asyncio.gather(
+            *(one(qid, q) for qid, q in questions.items())
+        )
+        return dict(pairs), usage
+
+    async def aclose(self) -> None:
+        if self._client is not None:
+            await self._client.aclose()
+            self._client = None

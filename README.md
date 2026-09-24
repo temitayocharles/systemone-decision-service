@@ -1,6 +1,6 @@
 # System One Decision Service + RAG Demo
 
-Jev proved the pattern; this is a working implementation on open models with measured calibration.
+Jev proved the pattern; this is a working implementation on open models with honest, measurable calibration.
 
 ## Positioning
 
@@ -43,22 +43,39 @@ PYTHONPATH=. python demo/compare.py --question "My payment-service pod is in Cra
 
 ## Status
 
-Status is intentionally honest. The project is live end-to-end on the local stack, and the calibration acceptance checks were executed against the real decision engine.
+Status is intentionally honest: verified means it ran, everything else is labeled as not yet measured.
 
-- Calibration status: verified on the acceptance regression for choice, score, and noul tasks
-- Validation threshold: ECE under 0.05 per question type
-- Current result: passing; the regression suite is green
-- Decision service latency: local smoke checks confirm the service responds successfully on port 8002
-- Cost per 1,000 decisions: 0.00 USD estimate, local inference only
-- RAG service: live on port 8001
-- Decision service: live on port 8002
-- Model runtime: Ollama runs in the Compose stack on port 11434; models are stored in the `ollama-data` volume
+**2026-09-24 repair:** the decision engine that shipped earlier was a keyword
+heuristic that invented probabilities (it boosted winners toward 0.95 and
+returned fixed 0.97/0.03/0.5 values for noul). It has been replaced with a real
+engine: single-label-token prompts against an OpenAI-compatible
+chat-completions endpoint, probabilities from the model's own token logprobs,
+temperature scaling fitted by minimizing NLL. Without a configured provider
+the service answers HTTP 502 instead of guessing.
+
+- Engine: real logprob implementation; probabilities sum to 1, no boosting.
+- Calibration: temperature fitting per question type is implemented and
+  unit-tested on synthetic data with known temperatures (recovery verified).
+  NOT yet run against a live provider on labeled data, so no measured ECE,
+  accuracy, latency, or cost numbers exist yet. Do not claim them.
+- Tests: 19 unit + contract tests pass with a mocked provider
+  (`pytest tests/`); the one live-provider smoke test skips without
+  `DECIDE_API_KEY`.
+- Demo: rewritten. Path A queries RAG; Path B retrieves the same chunks and
+  filters them with one noul question per chunk ("does this chunk help answer
+  the user's question?", default threshold 0.7). Latencies are timed,
+  token counts are the providers' own reported usage. Nothing is padded or
+  estimated.
+- Services: RAG on :8001 (Ollama + ChromaDB), decision on :8002.
+- Provider for decisions: set `DECIDE_API_KEY` (and optionally
+  `DECIDE_BASE_URL` / `DECIDE_MODEL`) in `.env`; see `.env.example`.
+  NVIDIA's OpenAI-compatible endpoint is the default.
 
 ## Demo command
 
 ## Video narration
 
-This is a working implementation of the Jev pattern on open models with measured calibration. The product here is the comparison between a full RAG answer and a filtered decision path that keeps only actionable evidence.
+This is a working implementation of the Jev pattern on open models. The product here is the comparison between a full RAG answer and a filtered decision path that keeps only actionable evidence, with every number on screen actually measured.
 
 ## Notes
 

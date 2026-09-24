@@ -47,10 +47,13 @@ class VectorStore:
             results = collection.query(query_embeddings=[query_embedding], n_results=top_k)
         docs = results.get("documents", [[]])[0]
         metas = results.get("metadatas", [[]])[0]
+        distances = results.get("distances", [[]])[0]
         output: List[Dict[str, Any]] = []
         for index, doc in enumerate(docs):
             item = {"text": doc}
             if metas and index < len(metas):
                 item.update(metas[index] or {})
+            if distances and index < len(distances) and distances[index] is not None:
+                item["distance"] = float(distances[index])
             output.append(item)
         return output

@@ -6,13 +6,21 @@ This project measures the choice, score, and noul decision paths against point-i
 
 ## Current implementation
 
-The executable harness in `eval/evaluate.py` builds a deterministic labeled example set and computes a before/after ECE summary plus a reliability-diagram payload. The live API exposes the same calibration shape at `/v1/calibrate` and requires at least 50 examples per request.
+`eval/evaluate.py` is an offline scorer: it reads a JSONL file of real
+recorded predictions (`{"p": <predicted probability>, "correct": 0|1}`) and
+reports accuracy, Brier score, ECE, and a reliability diagram. It invents
+nothing; with no input file it reports nothing. Record the predictions during
+real runs (for example, while calling /v1/calibrate against labeled data),
+then score them here.
 
 The repository does not currently implement the LLM-as-judge or raw-logprob baselines, p95 benchmark collection, or file export for PNG/SVG reliability diagrams. Those are acceptance targets for a fuller evaluation pass, not claims about the current script.
 
 ## Example data
 
-The current harness uses four incident-style choice cases repeated to produce 240 examples. It is a smoke/evaluation fixture, not the four-domain benchmark described in the original build packet.
+There is no bundled labeled example set. The old fixture (four incident-style
+choice cases with hardcoded probabilities) was removed because it measured
+nothing real. Bring at least 50 fresh labeled examples per question type when
+you run /v1/calibrate; the fitted temperature is only as honest as its data.
 
 ## JSONL contract
 
@@ -34,7 +42,12 @@ The numbered label values use the option key or score value, as relevant to that
 
 ## Calibration proof currently available
 
-The current proof is the before and after ECE values plus the reliability-diagram JSON payload returned by the harness or `/v1/calibrate`. PNG/SVG export is not implemented.
+No measured calibration proof exists yet. The machinery is in place and
+unit-tested: /v1/calibrate fits a temperature by minimizing NLL on labeled
+examples, persists it, and reports ECE before/after with a reliability
+diagram. Run it against a live provider on fresh labeled data, score the
+recorded predictions with eval/evaluate.py, and only then claim numbers.
+PNG/SVG export is not implemented.
 
 ## Definitions
 

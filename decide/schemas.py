@@ -82,8 +82,18 @@ class NoulAnswer(BaseModel):
     confidence: float = Field(ge=0, le=1)
 
 
+class DecisionMeta(BaseModel):
+    model: str
+    temperatures: Dict[str, float]
+    calibrated: Dict[str, bool]
+    latency_ms: int
+    usage: Dict[str, int]
+    note: str
+
+
 class DecisionResponse(BaseModel):
     results: Dict[str, Union[ChoiceAnswer, ScoreAnswer, NoulAnswer]]
+    meta: Optional[DecisionMeta] = None
 
 
 class CalibrationExample(BaseModel):

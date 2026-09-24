@@ -20,6 +20,12 @@ class QueryRequest(BaseModel):
     top_k: int = Field(5, ge=1, le=20)
 
 
+class RetrieveRequest(BaseModel):
+    collection: str = Field(..., min_length=1)
+    question: str = Field(..., min_length=1)
+    top_k: int = Field(5, ge=1, le=20)
+
+
 class IngestRequest(BaseModel):
     collection: str = Field(..., min_length=1)
 
@@ -55,6 +61,19 @@ def ingest(payload: IngestRequest) -> Dict[str, Any]:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     except Exception as exc:  # pragma: no cover
         raise HTTPException(status_code=500, detail=f"ingest failed: {exc}") from exc
+
+
+@app.post("/v1/retrieve")
+def retrieve(payload: RetrieveRequest) -> Dict[str, Any]:
+    start = time.perf_counter()
+    try:
+        result = pipeline.retrieve(payload.collection, payload.question, payload.top_k)
+        result["latency_ms"] = int((time.perf_counter() - start) * 1000)
+        return result
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except Exception as exc:  # pragma: no cover
+        raise HTTPException(status_code=500, detail=f"retrieve failed: {exc}") from exc
 
 
 @app.post("/v1/query")

@@ -43,6 +43,12 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
+        '502':
+          description: Model provider failed or is not configured; no probabilities were invented
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
   /v1/calibrate:
     post:
       summary: Fit a temperature scalar for a question type using NLL
@@ -207,6 +213,27 @@ components:
               - $ref: '#/components/schemas/ChoiceAnswer'
               - $ref: '#/components/schemas/ScoreAnswer'
               - $ref: '#/components/schemas/NoulAnswer'
+        meta:
+          type: object
+          properties:
+            model:
+              type: string
+            temperatures:
+              type: object
+              additionalProperties:
+                type: number
+            calibrated:
+              type: object
+              additionalProperties:
+                type: boolean
+            latency_ms:
+              type: integer
+            usage:
+              type: object
+              additionalProperties:
+                type: integer
+            note:
+              type: string
     CalibrationExample:
       type: object
       required: [state, question, label]
@@ -247,5 +274,9 @@ components:
           type: number
         ece_after:
           type: number
+        accuracy:
+          type: number
         reliability_diagram:
           type: object
+        note:
+          type: string
