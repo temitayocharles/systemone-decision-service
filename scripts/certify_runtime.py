@@ -48,7 +48,7 @@ def validate_response(payload: Dict[str, Any]) -> None:
 
 def main() -> None:
     parser = argparse.ArgumentParser(
-        description="Run a live end-to-end certification request against System One."
+        description="Run live end-to-end certification against System One."
     )
     parser.add_argument(
         "--runtime-url",
@@ -56,7 +56,7 @@ def main() -> None:
     )
     parser.add_argument(
         "--provider",
-        help="Optional configured provider instance ID.",
+        help="Optional configured inference-instance ID.",
     )
     parser.add_argument(
         "--model",
@@ -93,7 +93,7 @@ def main() -> None:
 
     base = args.runtime_url.rstrip("/")
     with httpx.Client(timeout=120) as client:
-        health = client.get(f"{base}/v1/health")
+        health = client.get(f"{base}/health")
         health.raise_for_status()
 
         providers = client.get(f"{base}/v2/providers")

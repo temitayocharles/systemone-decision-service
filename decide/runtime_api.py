@@ -3,16 +3,20 @@ from __future__ import annotations
 from typing import Any, Dict, List, Optional
 
 import uvicorn
-from fastapi import HTTPException
+from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel, Field, model_validator
 
-from .app import app
 from .calibration_service import fit_profile, profile_dict
 from .runtime import DecisionRuntime
 from .selection import ModelStats, SelectionPolicy
 from .telemetry import summarize
 
 
+app = FastAPI(
+    title="System One Decision Runtime",
+    version="0.3.0",
+    description="Provider-independent runtime for typed probabilistic decisions.",
+)
 runtime = DecisionRuntime()
 
 
@@ -65,6 +69,15 @@ class CalibrationFitRequest(BaseModel):
     question_type: str = Field(pattern="^(choice|score|null|noul)$")
     version: Optional[str] = None
     examples: List[Dict[str, Any]] = Field(min_length=20)
+
+
+@app.get("/health")
+async def health():
+    return {
+        "status": "ok",
+        "providers": len(tuple(runtime.providers.names())),
+        "default_provider": runtime.default_provider,
+    }
 
 
 @app.post("/v2/decide")

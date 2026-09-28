@@ -6,7 +6,7 @@ info:
 servers:
   - url: http://localhost:8002
 paths:
-  /v1/health:
+  /health:
     get:
       summary: Runtime health
       responses:
@@ -29,29 +29,15 @@ paths:
   /v2/batch:
     post:
       summary: Execute isolated decision requests as one batch
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              required: [requests]
-              properties:
-                requests:
-                  type: array
-                  minItems: 1
-                  maxItems: 100
-                  items:
-                    $ref: '#/components/schemas/RuntimeRequest'
       responses:
         '200':
-          description: Per-item success or error results
+          description: Per-item results
   /v2/providers:
     get:
-      summary: List configured provider instances and capabilities
+      summary: List configured inference instances and capabilities
       responses:
         '200':
-          description: Provider instance metadata
+          description: Inference-instance metadata
   /v2/metrics:
     get:
       summary: Runtime telemetry summary
@@ -65,25 +51,13 @@ paths:
         '200':
           description: Benchmark records
     put:
-      summary: Upsert a benchmark record with provenance
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/BenchmarkRecord'
+      summary: Persist a benchmark record with provenance
       responses:
         '200':
           description: Benchmark record persisted
   /v2/calibration/fit:
     post:
       summary: Fit and persist a calibration profile
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/CalibrationFitRequest'
       responses:
         '200':
           description: Persisted calibration profile
@@ -109,7 +83,8 @@ components:
           type: string
           nullable: true
         policy:
-          $ref: '#/components/schemas/SelectionPolicy'
+          type: object
+          nullable: true
         ensemble:
           type: array
           items:
@@ -117,107 +92,3 @@ components:
         request_id:
           type: string
           nullable: true
-    SelectionPolicy:
-      type: object
-      properties:
-        task_type:
-          type: string
-          default: generic
-        max_ece:
-          type: number
-          nullable: true
-        max_p95_latency_ms:
-          type: number
-          nullable: true
-        max_cost_per_1000:
-          type: number
-          nullable: true
-        min_accuracy:
-          type: number
-          nullable: true
-        preferred_provider:
-          type: string
-          nullable: true
-        required_capabilities:
-          type: array
-          items:
-            type: string
-        forbidden_capabilities:
-          type: array
-          items:
-            type: string
-        min_attributes:
-          type: object
-          additionalProperties:
-            type: number
-        max_attributes:
-          type: object
-          additionalProperties:
-            type: number
-        attribute_equals:
-          type: object
-          additionalProperties: true
-        require_healthy:
-          type: boolean
-          default: true
-    BenchmarkRecord:
-      type: object
-      required:
-        - provider
-        - model
-        - task_type
-        - run_id
-        - dataset_sha256
-        - created_at
-      properties:
-        provider:
-          type: string
-        model:
-          type: string
-        task_type:
-          type: string
-        samples:
-          type: integer
-        accuracy:
-          type: number
-          nullable: true
-        ece:
-          type: number
-          nullable: true
-        p95_latency_ms:
-          type: number
-          nullable: true
-        cost_per_1000:
-          type: number
-          nullable: true
-        failure_rate:
-          type: number
-        run_id:
-          type: string
-        dataset_sha256:
-          type: string
-          minLength: 64
-          maxLength: 64
-        created_at:
-          type: string
-        dataset_path:
-          type: string
-    CalibrationFitRequest:
-      type: object
-      required: [provider, model, question_type, examples]
-      properties:
-        provider:
-          type: string
-        model:
-          type: string
-        question_type:
-          type: string
-          enum: [choice, score, null, noul]
-        version:
-          type: string
-          nullable: true
-        examples:
-          type: array
-          minItems: 20
-          items:
-            type: object

@@ -2,23 +2,20 @@
 
 System One is a provider-independent runtime for typed probabilistic decisions.
 
-Applications submit state and typed questions through one stable API. The runtime resolves compatible provider instances from deployment configuration, filters them by capabilities and health, applies empirical performance constraints, and returns normalized decisions.
+Applications submit state and typed questions through one stable API. The runtime resolves compatible inference instances from deployment configuration, filters them by capabilities and health, applies empirical performance constraints and calibration, and returns normalized decisions.
 
-## Core capabilities
+## Core API
 
-- typed `choice`, `score`, and `null/noul` decisions
-- configurable provider instances
-- OpenAI-compatible logprob inference
-- native System One HTTP integration
-- custom Python drivers
-- capability-aware routing
-- empirical model selection
-- provider/model calibration profiles
-- batch decisions with per-item error isolation
-- provider ensembles
-- runtime telemetry and health-aware eligibility
-- benchmark and evaluation tooling
-- optional RAG integration
+- `GET /health`
+- `POST /v2/decide`
+- `POST /v2/batch`
+- `GET /v2/providers`
+- `GET /v2/metrics`
+- `GET /v2/benchmarks`
+- `PUT /v2/benchmarks`
+- `POST /v2/calibration/fit`
+
+System One exposes one runtime API generation for decisions, routing, benchmarking, and calibration.
 
 ## Architecture
 
@@ -28,37 +25,24 @@ Applications
     v
 System One Decision Runtime
     |
-    +-- capability filtering
+    +-- capability matching
     +-- health eligibility
-    +-- empirical performance constraints
-    +-- calibrated model selection
+    +-- empirical model selection
+    +-- calibration
+    +-- telemetry
     |
     v
-Provider instances
-    |
-    +-- OpenAI-compatible endpoints
-    +-- native System One endpoints
-    +-- custom drivers
+Compatible inference endpoints
 ```
 
-Applications depend on the System One contract rather than a specific model host or inference vendor.
+Inference instances are deployment-defined. Application code does not depend on a provider brand or model name.
 
 ## Quick start
 
 ```bash
 cp .env.example .env
 docker compose up -d --build
-```
-
-Runtime health:
-
-```bash
-curl http://localhost:8002/v1/health
-```
-
-Configured provider instances:
-
-```bash
+curl http://localhost:8002/health
 curl http://localhost:8002/v2/providers
 ```
 
@@ -79,13 +63,9 @@ SYSTEMONE_PROVIDER_SECONDARY_MODEL=model-b
 SYSTEMONE_PROVIDER_SECONDARY_API_KEY=
 ```
 
-Instance labels are arbitrary. Provider/model changes are deployment configuration changes.
+Instance labels are arbitrary deployment identifiers.
 
-See [Decision Runtime](docs/DECISION_RUNTIME.md).
-
-## Decision API
-
-`POST /v2/decide`
+## Decision request
 
 ```json
 {
@@ -107,111 +87,46 @@ See [Decision Runtime](docs/DECISION_RUNTIME.md).
 }
 ```
 
-A caller can select one provider instance, request an ensemble, or supply a routing policy for empirical selection.
+Send to `POST /v2/decide`.
 
-## Capability-aware routing
+A request can use the configured default instance, explicitly name one instance, request an ensemble, or provide an empirical routing policy.
+
+## Capability-aware empirical routing
+
+Instances can declare open-ended capabilities and typed attributes:
 
 ```env
 SYSTEMONE_PROVIDER_PRIMARY_CAPABILITIES=private_runtime,structured_output
 SYSTEMONE_PROVIDER_PRIMARY_ATTRIBUTES_JSON={"local":true,"max_context":32768,"region":"ca-central"}
 ```
 
-Policies can require or forbid capabilities and constrain typed attributes before empirical scoring.
-
-See [Capability Routing](docs/CAPABILITY_ROUTING.md).
-
-## Empirical selection
-
-Benchmark records are keyed by:
-
-```text
-provider-instance + model + task-type
-```
-
-Every persisted benchmark includes provenance:
-
-- run ID
-- dataset SHA-256
-- creation timestamp
-- dataset path
-- sample count
-- accuracy
-- ECE
-- p95 latency
-- failure rate
-- known cost when supplied
-
-Use:
-
-```bash
-PYTHONPATH=. python eval/benchmark_runtime.py \
-  --dataset eval/data/routing.jsonl \
-  --provider primary \
-  --model model-a \
-  --task-type routing
-```
-
-The bundled `eval/data/routing.jsonl` is a small pipeline fixture, not a performance claim.
-
-See [Empirical Selection](docs/EMPIRICAL_SELECTION.md).
+Benchmark records are keyed by provider instance, model, and task type and include run provenance. Routing policies filter candidates by capabilities, attributes, observed health, accuracy, calibration error, latency, failure rate, and known cost before empirical scoring.
 
 ## Calibration
 
-The canonical fitting endpoint is:
+Calibration is fitted through:
 
 ```text
 POST /v2/calibration/fit
 ```
 
-Profiles are keyed by:
+Profiles are keyed by provider instance, model, question type, and version. Compatible active engines reload newly fitted profiles without a service restart.
 
-```text
-provider-instance:model:question-type:version
-```
+## Evaluation and certification
 
-For binary/null calibration, observations contain `probability` and `label`. For choice/score calibration, observations contain `label_index` plus either raw `logits` or a probability vector.
-
-A newly fitted profile is persisted and reloaded into active compatible provider engines without requiring a service restart.
-
-## Evaluation
-
-The repository includes:
-
-- `eval/benchmark_runtime.py` for live provider/model benchmarking
-- `eval/evaluate.py` for offline scoring
-- `eval/data/` for pipeline fixtures
-- `scripts/certify_runtime.py` for live end-to-end provider certification
-- `EVAL_HARNESS.md` for measurement contracts
+- `scripts/certify_runtime.py` performs live end-to-end runtime certification
+- `eval/benchmark_runtime.py` records live labelled benchmark evidence
+- `eval/evaluate.py` performs offline scoring
+- `eval/data/` contains pipeline fixtures
 
 Performance claims require executed labelled workloads.
 
 ## RAG integration
 
+The included RAG service is optional:
+
 ```text
 documents -> retrieval -> evidence -> System One -> typed decision
-```
-
-The included demo uses the v2 Decision Runtime contract.
-
-## Service ports
-
-- Decision Runtime: `:8002`
-- RAG example service: `:8001`
-- Chroma: `:8000`
-- Ollama example service: `:11434`
-
-## Repository structure
-
-```text
-decide/     decision runtime, providers, calibration, routing
-eval/       benchmark and evaluation tooling
-rag/        optional RAG example service
-corpora/    example retrieval corpora
-demo/       integration examples
-scripts/    operational certification tooling
-docs/       runtime architecture, routing, and runbook
-tests/      unit and contract tests
-openapi.yaml
 ```
 
 ## Documentation

@@ -1,46 +1,23 @@
 # System One Runbook
 
-This runbook defines how to operate System One as one decision runtime.
+System One operates as one decision runtime.
 
-System One exposes a single application-facing decision service. Applications submit state and typed questions. The runtime resolves an eligible configured inference instance, applies the relevant calibration profile, executes the decision, records telemetry, and returns a normalized result.
+Applications submit state and typed questions. The runtime resolves an eligible configured inference instance, applies the relevant calibration profile, executes the decision, records telemetry, and returns a normalized result.
 
-```text
-Applications
-    |
-    v
-System One Decision Runtime
-    |
-    +-- provider-instance registry
-    +-- capability matching
-    +-- health eligibility
-    +-- empirical selection
-    +-- calibration
-    +-- telemetry
-    |
-    v
-Compatible inference endpoints
-```
+## API
 
-## 1. Runtime contract
-
-The operational API is:
-
-- `POST /v2/decide` — execute one decision request
-- `POST /v2/batch` — execute multiple isolated decision requests
-- `GET /v2/providers` — inspect configured inference instances
-- `GET /v2/metrics` — inspect runtime telemetry summary
-- `GET /v2/benchmarks` — inspect empirical benchmark records
-- `PUT /v2/benchmarks` — persist a benchmark record with provenance
-- `POST /v2/calibration/fit` — fit and activate a calibration profile
-- `GET /v1/health` — runtime health endpoint
+- `GET /health`
+- `POST /v2/decide`
+- `POST /v2/batch`
+- `GET /v2/providers`
+- `GET /v2/metrics`
+- `GET /v2/benchmarks`
+- `PUT /v2/benchmarks`
+- `POST /v2/calibration/fit`
 
 The service listens on port `8002` by default.
 
-## 2. Configure inference instances
-
-System One does not require a fixed provider or model. Inference instances are defined at deployment time.
-
-Example:
+## Configure inference instances
 
 ```env
 SYSTEMONE_PROVIDER_IDS=primary,secondary
@@ -52,93 +29,45 @@ SYSTEMONE_PROVIDER_PRIMARY_MODEL=model-a
 SYSTEMONE_PROVIDER_PRIMARY_API_KEY=
 SYSTEMONE_PROVIDER_PRIMARY_TIMEOUT_S=60
 SYSTEMONE_PROVIDER_PRIMARY_MAX_PARALLEL=8
-
-SYSTEMONE_PROVIDER_SECONDARY_DRIVER=openai_compatible
-SYSTEMONE_PROVIDER_SECONDARY_BASE_URL=http://model-server:8000/v1
-SYSTEMONE_PROVIDER_SECONDARY_MODEL=model-b
-SYSTEMONE_PROVIDER_SECONDARY_API_KEY=
-SYSTEMONE_PROVIDER_SECONDARY_TIMEOUT_S=60
-SYSTEMONE_PROVIDER_SECONDARY_MAX_PARALLEL=8
 ```
 
-Instance IDs such as `primary` and `secondary` are deployment labels. The model, endpoint, authentication, and driver behind each label can be changed without changing application code.
+Instance IDs are deployment labels. Endpoints, models, credentials, capabilities, and attributes can change without changing application code.
 
-For an instance ID such as `local-box`, the corresponding environment prefix is:
-
-```text
-SYSTEMONE_PROVIDER_LOCAL_BOX_*
-```
-
-## 3. Declare capabilities and attributes
-
-Each inference instance can advertise capabilities and typed attributes.
+Capabilities and attributes:
 
 ```env
 SYSTEMONE_PROVIDER_PRIMARY_CAPABILITIES=private_runtime,structured_output
 SYSTEMONE_PROVIDER_PRIMARY_ATTRIBUTES_JSON={"local":true,"max_context":32768,"region":"ca-central"}
 ```
 
-The capability set is open-ended. The runtime also derives protocol capabilities from the configured driver.
+## Start
 
-For `openai_compatible`, baseline capabilities include:
-
-- `chat_completions`
-- `token_logprobs`
-- `probabilistic_decisions`
-
-For `systemone_http`, baseline capabilities include:
-
-- `native_systemone`
-- `probabilistic_decisions`
-
-## 4. Start System One
-
-For a local Docker deployment:
+Local Docker deployment:
 
 ```bash
 cp .env.example .env
 docker compose up -d --build
 ```
 
-For Kubernetes, supply the same `SYSTEMONE_*` configuration through the deployment environment and secret mechanism.
+Kubernetes supplies the same `SYSTEMONE_*` configuration through the deployment environment and secret mechanism.
 
-The runtime itself remains the same in either deployment model.
-
-## 5. Verify the running service
-
-Check runtime health:
+## Verify
 
 ```bash
-curl -fsS http://localhost:8002/v1/health
-```
-
-Inspect the resolved inference registry:
-
-```bash
+curl -fsS http://localhost:8002/health
 curl -fsS http://localhost:8002/v2/providers
 ```
 
-Confirm that each expected instance reports:
+Confirm the expected inference instances, models, capabilities, attributes, and authentication state.
 
-- instance ID
-- driver
-- endpoint
-- configured model
-- authentication state
-- concurrency setting
-- capabilities
-- attributes
-
-## 6. Certify a configured runtime
-
-Use the provider-neutral certification tool:
+## Certify
 
 ```bash
 PYTHONPATH=. python scripts/certify_runtime.py \
   --runtime-url http://localhost:8002
 ```
 
-To certify a specific instance and model:
+To target a specific configured instance/model:
 
 ```bash
 PYTHONPATH=. python scripts/certify_runtime.py \
@@ -147,131 +76,26 @@ PYTHONPATH=. python scripts/certify_runtime.py \
   --model model-a
 ```
 
-Certification verifies the live System One contract against the configured inference endpoint, including typed decision output, probability bounds, route identity, and usage metadata when available.
+Certification verifies the live health, provider registry, decision route, typed answers, probability bounds, and usage metadata.
 
-Keep certification output with the deployment evidence for the corresponding model and serving configuration.
+## Decide
 
-## 7. Execute decisions
+Send state and typed questions to `POST /v2/decide`.
 
-A normal request submits state and one or more typed questions:
+Routing modes are mutually exclusive:
 
-```json
-{
-  "state": {
-    "service": "payments",
-    "status": "degraded"
-  },
-  "questions": {
-    "route": {
-      "type": "choice",
-      "instructions": "Select the best response path.",
-      "criteria": {
-        "investigate": "Investigate first",
-        "rollback": "Rollback",
-        "observe": "Continue observing"
-      }
-    }
-  }
-}
-```
+- default routing uses the configured default instance
+- explicit routing names one provider instance
+- empirical routing supplies a policy
+- ensemble routing supplies a list of configured instances
 
-Submit it to:
+Empirical policies can constrain task type, capabilities, typed attributes, observed health, ECE, p95 latency, accuracy, failure rate, and known cost.
 
-```text
-POST /v2/decide
-```
+## Batch
 
-System One supports three routing modes.
+`POST /v2/batch` accepts up to 100 requests. Each item returns independently with its input index and either a result or typed error.
 
-### Default routing
-
-Omit `provider`, `policy`, and `ensemble`. The runtime uses the configured default instance.
-
-### Explicit routing
-
-Specify one configured provider instance:
-
-```json
-{
-  "provider": "primary"
-}
-```
-
-A model may also be supplied when the configured driver supports model selection.
-
-### Empirical routing
-
-Supply a routing policy instead of a provider:
-
-```json
-{
-  "policy": {
-    "task_type": "routing",
-    "required_capabilities": ["token_logprobs"],
-    "attribute_equals": {
-      "local": true
-    },
-    "max_ece": 0.05,
-    "max_p95_latency_ms": 250,
-    "min_accuracy": 0.90
-  }
-}
-```
-
-The runtime filters candidates by task, capabilities, attributes, observed health, and empirical thresholds before selecting among the eligible benchmarked models.
-
-### Ensemble routing
-
-Specify the configured instances to combine:
-
-```json
-{
-  "ensemble": ["primary", "secondary"]
-}
-```
-
-Compatible outputs are normalized into one decision result.
-
-The routing modes are mutually exclusive.
-
-## 8. Run batch decisions
-
-Submit up to 100 requests through:
-
-```text
-POST /v2/batch
-```
-
-Each result is isolated and returned with its input index.
-
-Successful item:
-
-```json
-{
-  "index": 0,
-  "ok": true,
-  "result": {}
-}
-```
-
-Unsuccessful item:
-
-```json
-{
-  "index": 1,
-  "ok": false,
-  "error": {
-    "type": "RuntimeError",
-    "detail": "..."
-  }
-}
-```
-
-One item does not invalidate the successful results of other batch items.
-
-## 9. Benchmark an inference instance
-
-Use a labelled workload representative of the task.
+## Benchmark
 
 ```bash
 PYTHONPATH=. python eval/benchmark_runtime.py \
@@ -281,214 +105,48 @@ PYTHONPATH=. python eval/benchmark_runtime.py \
   --task-type routing
 ```
 
-For production evidence, use a task-specific labelled dataset rather than the bundled pipeline fixture.
+Use representative labelled workloads for real performance evidence.
 
-Each persisted benchmark contains:
+Persisted benchmarks include provider instance, model, task type, sample count, accuracy, ECE, p95 latency, failure rate, optional known cost, run ID, dataset SHA-256, creation timestamp, and dataset path.
 
-- provider instance
-- model
-- task type
-- sample count
-- accuracy
-- expected calibration error
-- p95 latency
-- failure rate
-- known cost when supplied
-- run ID
-- dataset SHA-256
-- creation timestamp
-- dataset path
+## Calibrate
 
-Inspect benchmark records:
+Fit labelled observations through `POST /v2/calibration/fit`.
 
-```bash
-curl -fsS http://localhost:8002/v2/benchmarks
-```
-
-Benchmark identity is:
-
-```text
-provider-instance + model + task-type
-```
-
-## 10. Fit calibration
-
-Calibration is fitted against labelled observations for the exact provider instance, model, and question type being served.
-
-### Null / binary calibration
-
-```json
-{
-  "provider": "primary",
-  "model": "model-a",
-  "question_type": "null",
-  "examples": [
-    {
-      "probability": 0.82,
-      "label": 1
-    }
-  ]
-}
-```
-
-### Choice / score calibration
-
-```json
-{
-  "provider": "primary",
-  "model": "model-a",
-  "question_type": "choice",
-  "examples": [
-    {
-      "probabilities": [0.10, 0.80, 0.10],
-      "label_index": 1
-    }
-  ]
-}
-```
-
-Raw logits may be supplied instead of probability vectors.
-
-At least 20 labelled observations are required.
-
-Submit calibration data to:
-
-```text
-POST /v2/calibration/fit
-```
-
-Profiles are persisted by:
+Profiles are stored by:
 
 ```text
 provider-instance:model:question-type:version
 ```
 
-Compatible active engines reload the fitted profile without requiring a runtime restart.
+At least 20 labelled observations are required. Compatible active engines reload the fitted profile without a restart.
 
-## 11. Validate empirical routing
-
-Once benchmark records exist for candidate instances, send a decision request with a policy and no explicit provider.
-
-Example:
-
-```json
-{
-  "state": "task state",
-  "questions": {
-    "route": {
-      "type": "choice",
-      "instructions": "Choose the route.",
-      "criteria": {
-        "a": "Route A",
-        "b": "Route B"
-      }
-    }
-  },
-  "policy": {
-    "task_type": "routing",
-    "required_capabilities": ["token_logprobs"],
-    "max_ece": 0.05,
-    "max_p95_latency_ms": 250,
-    "min_accuracy": 0.90
-  }
-}
-```
-
-Verify that the returned `route.provider` and `route.model` correspond to an eligible persisted benchmark record.
-
-## 12. Observe the runtime
-
-Inspect telemetry:
+## Observe
 
 ```bash
 curl -fsS "http://localhost:8002/v2/metrics?limit=1000"
 ```
 
-Runtime telemetry records:
+Telemetry records request ID, provider instance, model, status, latency, token usage, and question types. Latest observed provider status contributes to health-aware empirical routing.
 
-- request ID
-- provider instance
-- model
-- status
-- latency
-- token usage
-- question types
+## Scale
 
-The latest observed result for each configured instance contributes to health-aware empirical routing.
+The request execution layer is stateless and can be horizontally replicated behind one service endpoint. Use durable or shared storage for benchmark records, calibration profiles, and telemetry when multiple replicas operate together.
 
-## 13. Scale System One
+Inference endpoints may be external, local, or cluster-internal.
 
-The request execution layer is stateless. Multiple runtime replicas can sit behind one service endpoint.
+## RAG
+
+RAG is an optional evidence source:
 
 ```text
-                    Application
-                         |
-                         v
-                   Runtime Service
-                         |
-              +----------+----------+
-              |          |          |
-              v          v          v
-          Runtime 1  Runtime 2  Runtime 3
-              |          |          |
-              +----------+----------+
-                         |
-                         v
-                 Inference endpoints
+documents -> retrieval -> evidence -> System One -> typed decision
 ```
 
-For clustered deployments, use shared or durable storage for:
+The included demo sends retrieved evidence through the same `/v2/decide` contract.
 
-- benchmark records
-- calibration profiles
-- telemetry
+## Release certification
 
-Provider endpoints may be external, local, or cluster-internal.
+A deployment is ready when the configured registry matches the intended inference resources, `/health` succeeds, live certification passes, CI is green, empirical routing has representative benchmark evidence where used, required calibration profiles are fitted, and telemetry is writable.
 
-## 14. RAG integration
-
-RAG is an optional evidence source, not a separate decision architecture.
-
-```text
-documents
-   |
-   v
-retrieval
-   |
-   v
-evidence
-   |
-   v
-System One
-   |
-   v
-typed decision
-```
-
-With the included RAG service running:
-
-```bash
-PYTHONPATH=. python demo/compare.py \
-  --question "My service is unhealthy; what evidence is relevant?" \
-  --collection engineering \
-  --top-k 8 \
-  --verbose
-```
-
-The demo sends retrieved evidence through the same System One v2 decision contract used by other applications.
-
-## 15. Release certification
-
-A System One deployment is ready for use when:
-
-- the configured provider registry matches the deployment
-- runtime health succeeds
-- live certification succeeds for each intended inference instance
-- the test suite is green
-- representative labelled workloads have been benchmarked where empirical routing is used
-- benchmark provenance is recorded
-- calibration profiles are fitted where required
-- empirical routing policies resolve an eligible model
-- runtime telemetry is writable and observable
-
-The operational unit is always **System One**. Models and inference endpoints are interchangeable configured resources behind that runtime.
+The operational unit is System One. Models and inference endpoints are interchangeable configured resources behind the runtime.
