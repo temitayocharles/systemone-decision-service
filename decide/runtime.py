@@ -91,20 +91,39 @@ class DecisionRuntime:
         }
 
     async def batch(self, requests: Iterable[Dict[str, Any]]) -> list[Dict[str, Any]]:
-        async def run(item: Dict[str, Any]) -> Dict[str, Any]:
-            policy = item.get("policy")
-            selection = SelectionPolicy(**policy) if isinstance(policy, dict) else None
-            return await self.decide(
-                state=item["state"],
-                questions=item["questions"],
-                provider=item.get("provider"),
-                model=item.get("model"),
-                policy=selection,
-                ensemble=item.get("ensemble"),
-                request_id=item.get("request_id"),
-            )
+        async def run(index: int, item: Dict[str, Any]) -> Dict[str, Any]:
+            try:
+                policy = item.get("policy")
+                selection = (
+                    SelectionPolicy(**policy)
+                    if isinstance(policy, dict)
+                    else None
+                )
+                result = await self.decide(
+                    state=item["state"],
+                    questions=item["questions"],
+                    provider=item.get("provider"),
+                    model=item.get("model"),
+                    policy=selection,
+                    ensemble=item.get("ensemble"),
+                    request_id=item.get("request_id"),
+                )
+                return {"index": index, "ok": True, "result": result}
+            except Exception as exc:
+                return {
+                    "index": index,
+                    "ok": False,
+                    "error": {
+                        "type": type(exc).__name__,
+                        "detail": str(exc),
+                    },
+                }
 
-        return list(await asyncio.gather(*(run(item) for item in requests)))
+        return list(
+            await asyncio.gather(
+                *(run(index, item) for index, item in enumerate(requests))
+            )
+        )
 
     async def _invoke(
         self,
@@ -161,7 +180,10 @@ def _merge_results(results: list[ProviderResult]) -> Dict[str, Any]:
             for answer in answers:
                 labels.update((answer.get("probabilities") or {}).keys())
             probs = {
-                label: sum(float((a.get("probabilities") or {}).get(label, 0.0)) for a in answers) / len(answers)
+                label: sum(
+                    float((a.get("probabilities") or {}).get(label, 0.0))
+                    for a in answers
+                ) / len(answers)
                 for label in labels
             }
             value = max(probs, key=probs.get)
@@ -172,15 +194,27 @@ def _merge_results(results: list[ProviderResult]) -> Dict[str, Any]:
                 "confidence": probs[value],
             }
         elif qtype in {"null", "noul"}:
-            values = [float(a.get("value", a.get("noul", 0.0))) for a in answers]
+            values = [
+                float(a.get("value", a.get("noul", 0.0)))
+                for a in answers
+            ]
             p = sum(values) / len(values)
-            merged[qid] = {"type": "null", "value": p, "confidence": max(p, 1.0 - p)}
+            merged[qid] = {
+                "type": "null",
+                "value": p,
+                "confidence": max(p, 1.0 - p),
+            }
         elif qtype == "score":
-            values = [float(a.get("value", a.get("score", 0.0))) for a in answers]
+            values = [
+                float(a.get("value", a.get("score", 0.0)))
+                for a in answers
+            ]
             merged[qid] = {
                 "type": "score",
                 "value": sum(values) / len(values),
-                "confidence": sum(float(a.get("confidence", 0.0)) for a in answers) / len(answers),
+                "confidence": sum(
+                    float(a.get("confidence", 0.0)) for a in answers
+                ) / len(answers),
             }
         else:
             merged[qid] = answers[0]
@@ -188,9 +222,15 @@ def _merge_results(results: list[ProviderResult]) -> Dict[str, Any]:
     return {
         "answers": merged,
         "usage": {
-            "prompt_tokens": sum(r.usage.get("prompt_tokens", 0) for r in results),
-            "completion_tokens": sum(r.usage.get("completion_tokens", 0) for r in results),
-            "total_tokens": sum(r.usage.get("total_tokens", 0) for r in results),
+            "prompt_tokens": sum(
+                r.usage.get("prompt_tokens", 0) for r in results
+            ),
+            "completion_tokens": sum(
+                r.usage.get("completion_tokens", 0) for r in results
+            ),
+            "total_tokens": sum(
+                r.usage.get("total_tokens", 0) for r in results
+            ),
         },
         "latency_ms": max(r.latency_ms for r in results),
     }

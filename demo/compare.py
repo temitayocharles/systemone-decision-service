@@ -1,111 +1,112 @@
-"""Honest RAG-only vs RAG-plus-decision comparison.
+"""RAG-only versus RAG + System One evidence filtering.
 
-Path A (RAG-only): ask the RAG service for an answer over the top-k chunks.
-Path B (RAG + decision): retrieve the SAME chunks via /v1/retrieve, then ask
-the decision service one noul question per chunk, "does this chunk help answer
-the user's question?", and keep only chunks at or above the threshold.
-
-Everything reported is measured: latencies are timed here, token counts come
-from the services' own responses. Nothing is estimated, reused across paths,
-or padded.
+The demo uses the stable v2 Decision Runtime contract.
 """
 from __future__ import annotations
 
 import argparse
 import json
-import sys
+import os
 import time
 from typing import Any, Dict, List
 
-import requests
+import httpx
 
 
-RAG_URL = "http://localhost:8001"
-DECIDE_URL = "http://localhost:8002"
+RAG_URL = os.getenv("RAG_URL", "http://localhost:8001").rstrip("/")
+DECISION_URL = os.getenv("DECISION_URL", "http://localhost:8002").rstrip("/")
 
 
-def timed_post(url: str, payload: Dict[str, Any], timeout: int = 180):
-    start = time.perf_counter()
-    response = requests.post(url, json=payload, timeout=timeout)
-    latency_ms = int((time.perf_counter() - start) * 1000)
-    return response, latency_ms
+def post_json(url: str, payload: Dict[str, Any]) -> Dict[str, Any]:
+    with httpx.Client(timeout=120) as client:
+        response = client.post(url, json=payload)
+        response.raise_for_status()
+        return response.json()
 
 
-def path_a(question: str, collection: str, top_k: int) -> Dict[str, Any]:
-    response, latency_ms = timed_post(
+def rag_only(question: str, collection: str, top_k: int) -> Dict[str, Any]:
+    started = time.perf_counter()
+    result = post_json(
         f"{RAG_URL}/v1/query",
-        {"collection": collection, "question": question, "top_k": top_k},
+        {
+            "collection": collection,
+            "question": question,
+            "top_k": top_k,
+        },
     )
-    response.raise_for_status()
-    body = response.json()
     return {
-        "answer": body.get("answer", ""),
-        "n_chunks": len(body.get("sources", [])),
-        "tokens_in": body.get("tokens_in"),
-        "tokens_out": body.get("tokens_out"),
-        "latency_ms": latency_ms,
+        "answer": result.get("answer"),
+        "sources": result.get("sources", []),
+        "tokens": result.get("tokens", 0),
+        "latency_ms": int((time.perf_counter() - started) * 1000),
     }
 
 
-def path_b(
-    question: str, collection: str, top_k: int, threshold: float
+def decision_filtered(
+    question: str,
+    collection: str,
+    top_k: int,
+    threshold: float,
+    provider: str | None,
 ) -> Dict[str, Any]:
-    response, retrieve_ms = timed_post(
+    started = time.perf_counter()
+    retrieved = post_json(
         f"{RAG_URL}/v1/retrieve",
-        {"collection": collection, "question": question, "top_k": top_k},
+        {
+            "collection": collection,
+            "question": question,
+            "top_k": top_k,
+        },
     )
-    response.raise_for_status()
-    chunks = response.json().get("chunks", [])
+    chunks: List[Dict[str, Any]] = retrieved.get("chunks", [])
+    if not chunks:
+        return {
+            "kept": [],
+            "dropped": [],
+            "latency_ms": int((time.perf_counter() - started) * 1000),
+            "usage": {},
+        }
 
-    kept: List[Dict[str, Any]] = []
-    decide_ms = 0
-    usage = {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0}
-    for chunk in chunks:
-        text = chunk.get("text", "")
-        if not text.strip():
-            continue
-        resp, ms = timed_post(
-            f"{DECIDE_URL}/v1/decide",
-            {
-                "state": text,
-                "questions": {
-                    "actionable": {
-                        "type": "noul",
-                        "prompt": (
-                            "This chunk contains information that helps answer "
-                            f"the user's question: {question}"
-                        ),
-                    }
-                },
+    questions = {
+        f"chunk_{idx}": {
+            "type": "null",
+            "instructions": (
+                "Does this evidence chunk materially help answer the user's question?"
+            ),
+        }
+        for idx, _ in enumerate(chunks)
+    }
+    payload: Dict[str, Any] = {
+        "state": {
+            "question": question,
+            "chunks": {
+                f"chunk_{idx}": chunk.get("text", "")
+                for idx, chunk in enumerate(chunks)
             },
+        },
+        "questions": questions,
+    }
+    if provider:
+        payload["provider"] = provider
+
+    decision = post_json(f"{DECISION_URL}/v2/decide", payload)
+    answers = decision.get("answers", {})
+
+    kept, dropped = [], []
+    for idx, chunk in enumerate(chunks):
+        probability = float(
+            (answers.get(f"chunk_{idx}") or {}).get("value", 0.0)
         )
-        decide_ms += ms
-        if resp.status_code == 502:
-            raise RuntimeError(
-                "decision service has no model provider configured "
-                f"({resp.json().get('detail')}). Set DECIDE_API_KEY; refusing to fake it."
-            )
-        resp.raise_for_status()
-        body = resp.json()
-        p = float(body["results"]["actionable"]["value"])
-        for key in usage:
-            usage[key] += int((body.get("meta") or {}).get("usage", {}).get(key, 0) or 0)
-        if p >= threshold:
-            kept.append({"p_actionable": round(p, 3), "text": text})
+        row = {**chunk, "relevance_probability": probability}
+        (kept if probability >= threshold else dropped).append(row)
 
     return {
         "kept": kept,
-        "n_chunks": len(chunks),
-        "n_kept": len(kept),
-        "usage": usage,
-        "latency_ms": retrieve_ms + decide_ms,
-        "retrieve_ms": retrieve_ms,
-        "decide_ms": decide_ms,
+        "dropped": dropped,
+        "latency_ms": int((time.perf_counter() - started) * 1000),
+        "usage": decision.get("usage", {}),
+        "route": decision.get("route", {}),
     }
-
-
-def fmt_tokens(value: Any) -> str:
-    return str(value) if isinstance(value, int) else "n/a (not reported)"
 
 
 def main() -> None:
@@ -114,43 +115,25 @@ def main() -> None:
     parser.add_argument("--collection", default="engineering")
     parser.add_argument("--top-k", type=int, default=8)
     parser.add_argument("--threshold", type=float, default=0.7)
+    parser.add_argument("--provider")
     parser.add_argument("--verbose", action="store_true")
     args = parser.parse_args()
 
-    a = path_a(args.question, args.collection, args.top_k)
-    try:
-        b = path_b(args.question, args.collection, args.top_k, args.threshold)
-    except RuntimeError as exc:
-        print(f"path B unavailable: {exc}", file=sys.stderr)
-        sys.exit(1)
-
-    print(f"Question: {args.question}")
-    print(f"Collection: {args.collection}, top_k={args.top_k}, noul threshold={args.threshold}")
-    print()
-    print("| Path | Result | Evidence | Tokens in | Tokens out | Latency (measured) |")
-    print("| ---- | ------ | -------- | --------- | ---------- | ------------------ |")
-    print(
-        f"| RAG-only | answer ({len(a['answer'])} chars) | "
-        f"{a['n_chunks']} chunks shown | {fmt_tokens(a['tokens_in'])} | "
-        f"{fmt_tokens(a['tokens_out'])} | {a['latency_ms']} ms |"
-    )
-    print(
-        f"| RAG + decision | {b['n_kept']} actionable chunks kept | "
-        f"{b['n_kept']}/{b['n_chunks']} chunks (retrieve {b['retrieve_ms']} ms + "
-        f"decide {b['decide_ms']} ms) | {b['usage']['prompt_tokens']} | "
-        f"{b['usage']['completion_tokens']} | {b['latency_ms']} ms |"
-    )
-    print()
-    print(
-        "Token counts are reported by each service for its own calls. "
-        "RAG retrieval embeddings are not token-counted by the RAG service, "
-        "so they are marked n/a rather than estimated."
-    )
-
-    if args.verbose:
-        print("\nPath B kept chunks (P(actionable)):")
-        for i, chunk in enumerate(b["kept"], start=1):
-            print(f"\n{i}. p={chunk['p_actionable']}\n{chunk['text'][:400]}")
+    output = {
+        "rag_only": rag_only(
+            args.question,
+            args.collection,
+            args.top_k,
+        ),
+        "rag_plus_decision": decision_filtered(
+            args.question,
+            args.collection,
+            args.top_k,
+            args.threshold,
+            args.provider,
+        ),
+    }
+    print(json.dumps(output, indent=2 if args.verbose else None))
 
 
 if __name__ == "__main__":
