@@ -1,36 +1,54 @@
-# System One demo UI
+# System One UI
 
-A warm-palette, single-page interface for walking non-technical audiences
-through the decision service. It renders probability bars instead of raw JSON
-and shows provider, model, routing mode, latency, and tokens when the runtime
-returns them.
+A browser-first workspace for using the System One Decision Runtime and the RAG example service without writing API commands.
 
-## Run it
+The interface is intentionally white, minimal, responsive, and focused on non-technical workflows.
+
+## What users can do
+
+- choose the Engineering or Business knowledge collection
+- index the selected built-in collection
+- ask a question in plain English
+- review retrieved evidence
+- generate a structured System One decision
+- batch-triage multiple text items
+- see runtime and RAG health
+- see configured inference instances
+- expand technical route/model/token details only when needed
+
+## Run
+
+Start the repository services first:
+
+```bash
+docker compose up -d --build
+```
+
+Then:
 
 ```bash
 cd demo/ui
 python3 serve_demo.py
 ```
 
-Then open http://localhost:8080 in a browser.
+Open:
 
-`serve_demo.py` is a same-origin proxy: it serves the page and forwards
-`/health` and `/v2/*` to the runtime (default http://localhost:8002; override
-with `--runtime`). The runtime does not serve CORS headers, hence the proxy.
-
-```bash
-python3 serve_demo.py --port 8080 --runtime http://localhost:8002
+```text
+http://localhost:8080
 ```
 
-## Templates
+The UI server is a small same-origin proxy:
 
-Six scenario templates ship in the page: email triage, AC support ticket,
-Kubernetes alert, contract clause, competitor note, and file review. There is
-also a batch mode and a trust panel describing what the model does and does
-not do (probabilities only; deterministic code acts on thresholds).
+- `/health` and `/v2/*` go to the System One runtime on port 8002
+- `/rag/*` goes to the RAG service on port 8001 after removing the `/rag` prefix
 
-## Status
+Override endpoints when needed:
 
-Schema-validated against the v2 OpenAPI contract. Not yet exercised against a
-live provider stack; run the first end-to-end pass locally before any
-audience sees it.
+```bash
+python3 serve_demo.py \
+  --port 8080 \
+  --runtime http://localhost:8002 \
+  --rag http://localhost:8001
+```
+
+No front-end build step or external JavaScript dependency is required.
