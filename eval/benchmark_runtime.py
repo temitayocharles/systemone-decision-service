@@ -2,14 +2,17 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import hashlib
 import json
-import math
 import statistics
+import uuid
+from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import List
 
 from decide.runtime import DecisionRuntime
 from decide.selection import ModelStats
+from decide.statistics import percentile_nearest_rank
 
 
 def ece(confidences: List[float], correct: List[int], bins: int = 10) -> float:
@@ -33,11 +36,16 @@ def ece(confidences: List[float], correct: List[int], bins: int = 10) -> float:
 
 async def run(args: argparse.Namespace) -> None:
     runtime = DecisionRuntime()
+    dataset_path = Path(args.dataset)
+    raw_bytes = dataset_path.read_bytes()
     rows = [
         json.loads(line)
-        for line in Path(args.dataset).read_text().splitlines()
+        for line in raw_bytes.decode("utf-8").splitlines()
         if line.strip()
     ]
+    if not rows:
+        raise SystemExit("benchmark dataset is empty")
+
     confidences: List[float] = []
     correct: List[int] = []
     latencies: List[int] = []
@@ -64,8 +72,6 @@ async def run(args: argparse.Namespace) -> None:
     if not latencies:
         raise SystemExit("no successful benchmark samples")
 
-    ordered = sorted(latencies)
-    p95 = ordered[min(len(ordered) - 1, math.ceil(0.95 * len(ordered)) - 1)]
     stat = ModelStats(
         provider=args.provider,
         model=args.model,
@@ -73,9 +79,13 @@ async def run(args: argparse.Namespace) -> None:
         samples=len(rows),
         accuracy=sum(correct) / len(correct) if correct else 0.0,
         ece=ece(confidences, correct),
-        p95_latency_ms=float(p95),
+        p95_latency_ms=percentile_nearest_rank(latencies, 0.95),
         cost_per_1000=args.cost_per_1000,
         failure_rate=failures / len(rows),
+        run_id=str(uuid.uuid4()),
+        dataset_sha256=hashlib.sha256(raw_bytes).hexdigest(),
+        created_at=datetime.now(timezone.utc).isoformat(),
+        dataset_path=str(dataset_path),
     )
     runtime.benchmarks.upsert(stat)
     print(json.dumps(stat.__dict__, indent=2))

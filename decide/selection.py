@@ -21,6 +21,10 @@ class ModelStats:
     p95_latency_ms: Optional[float] = None
     cost_per_1000: Optional[float] = None
     failure_rate: float = 0.0
+    run_id: str = ""
+    dataset_sha256: str = ""
+    created_at: str = ""
+    dataset_path: str = ""
 
 
 @dataclass
@@ -56,7 +60,15 @@ class BenchmarkStore:
             raw = json.loads(self.path.read_text())
         except (OSError, json.JSONDecodeError):
             return []
-        return [ModelStats(**item) for item in raw if isinstance(item, dict)]
+        rows = []
+        for item in raw:
+            if not isinstance(item, dict):
+                continue
+            try:
+                rows.append(ModelStats(**item))
+            except TypeError:
+                continue
+        return rows
 
     def save(self, stats: Iterable[ModelStats]) -> None:
         self.path.parent.mkdir(parents=True, exist_ok=True)
@@ -65,6 +77,10 @@ class BenchmarkStore:
         tmp.replace(self.path)
 
     def upsert(self, stat: ModelStats) -> None:
+        if not stat.run_id or not stat.dataset_sha256 or not stat.created_at:
+            raise ValueError(
+                "benchmark provenance requires run_id, dataset_sha256, and created_at"
+            )
         rows = self.load()
         keyed: Dict[Tuple[str, str, str], ModelStats] = {
             (s.provider, s.model, s.task_type): s for s in rows
