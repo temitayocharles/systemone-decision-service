@@ -4,6 +4,137 @@ System One operates as one decision runtime.
 
 Applications submit state and typed questions. The runtime resolves an eligible configured inference instance, applies the relevant calibration profile, executes the decision, records telemetry, and returns a normalized result.
 
+## High-level stack
+
+System One is one user-facing decision system composed of a small number of cooperating services.
+
+```text
+                         Browser / Application
+                                  |
+                    +-------------+-------------+
+                    |                           |
+                    v                           v
+           System One UI                 Direct API clients
+           demo/ui :8080                       |
+                    |                           |
+          same-origin proxy                    |
+                    |                           |
+          +---------+---------+                 |
+          |                   |                 |
+          v                   v                 |
+   RAG service :8001   Decision Runtime :8002 <-+
+          |                   |
+          |                   +--> provider registry
+          |                   +--> capability + health filtering
+          |                   +--> calibration profiles
+          |                   +--> empirical benchmarks
+          |                   +--> telemetry
+          |                   |
+          |                   +--> local inference (Ollama)
+          |                   +--> hosted / cluster inference
+          |
+          +--> embedding model
+          +--> Chroma vector store
+          +--> generation model
+
+Knowledge documents
+      |
+      v
+chunk -> embed -> Chroma -> retrieve evidence
+                              |
+                              v
+                    System One decision runtime
+                              |
+                              v
+                 choice / null / score result
+```
+
+### What each layer does
+
+**System One UI — `demo/ui`, port `8080`**
+
+The browser-first workspace for non-technical users. It lets users index the built-in knowledge collections, ask questions, inspect retrieved evidence, run typed decisions, batch-triage items, and see service/provider health without writing API commands.
+
+The small `serve_demo.py` process is only a same-origin proxy:
+- `/health` and `/v2/*` go to the Decision Runtime on port `8002`
+- `/rag/*` goes to the RAG service on port `8001`
+
+**Decision Runtime — `decide/`, port `8002`**
+
+This is the core System One service. It accepts state plus typed questions and returns normalized probabilistic decisions.
+
+It owns:
+- provider-instance resolution
+- explicit, empirical, and ensemble routing
+- capability and health filtering
+- calibration-profile loading
+- benchmark-aware model selection
+- telemetry
+- batch execution
+
+Applications depend on this contract rather than on a specific model host.
+
+**RAG service — `rag/`, port `8001`**
+
+An optional evidence source. It ingests the Engineering and Business corpora, creates embeddings, stores them in Chroma, retrieves relevant chunks, and can generate a normal RAG answer.
+
+Retrieved evidence can then be supplied to System One for a typed decision.
+
+**Chroma — port `8000`**
+
+The vector store used by the RAG service. It stores embedded document chunks and returns the nearest evidence for a query.
+
+The Python client and server image are pinned to the same release.
+
+**Ollama — port `11434`**
+
+The bundled local inference host used by the default local stack.
+
+The Compose stack bootstraps:
+- `qwen2.5:3b` for generation and local decision inference
+- `nomic-embed-text` for embeddings
+
+The runtime is not built around Ollama. Any compatible configured inference endpoint can sit behind System One.
+
+**Provider instances**
+
+A provider instance is a deployment-defined inference target. It can be:
+- local
+- cluster-internal
+- hosted
+- any compatible future backend
+
+Each instance supplies configuration such as driver, endpoint, model, credentials, capabilities, and typed attributes.
+
+**Operational data**
+
+System One persists three kinds of runtime evidence:
+- calibration profiles
+- benchmark records
+- telemetry
+
+These support calibrated probabilities, empirical provider/model selection, health-aware routing, and operational inspection.
+
+### Request flow
+
+A typical knowledge-assisted decision follows this path:
+
+```text
+1. User asks a question in the UI
+2. UI calls the RAG service
+3. RAG embeds the question
+4. Chroma returns relevant evidence
+5. RAG may generate a normal answer
+6. UI sends state + evidence to System One
+7. Runtime resolves an eligible inference instance
+8. Model returns probabilistic typed outputs
+9. Calibration is applied where available
+10. System One returns a normalized choice / null / score result
+11. Telemetry records the execution
+```
+
+RAG is optional. Applications can call System One directly whenever they already have the state needed for a decision.
+
 ## API
 
 - `GET /health`
@@ -51,6 +182,19 @@ docker compose up -d --build
 
 Kubernetes supplies the same `SYSTEMONE_*` configuration through the deployment environment and secret mechanism.
 
+For the browser workspace:
+
+```bash
+cd demo/ui
+python3 serve_demo.py
+```
+
+Then open:
+
+```text
+http://localhost:8080
+```
+
 ## Verify
 
 ```bash
@@ -59,6 +203,8 @@ curl -fsS http://localhost:8002/v2/providers
 ```
 
 Confirm the expected inference instances, models, capabilities, attributes, and authentication state.
+
+The UI also surfaces Decision Runtime and RAG health for normal browser-based use.
 
 ## Certify
 
@@ -143,7 +289,7 @@ RAG is an optional evidence source:
 documents -> retrieval -> evidence -> System One -> typed decision
 ```
 
-The included demo sends retrieved evidence through the same `/v2/decide` contract.
+The browser workspace exposes indexing, retrieval, RAG query, evidence review, and typed decisions without requiring users to work directly with API commands.
 
 ## Release certification
 
