@@ -1,6 +1,6 @@
 # Empirical model selection
 
-The runtime does not assume Jev, an OpenAI-compatible model, or any future provider is best.
+The runtime does not assume any provider instance or model is best.
 
 Selection is based on recorded benchmark evidence for a task type.
 
@@ -27,17 +27,20 @@ Use real recorded and labelled examples. Do not manufacture benchmark numbers.
 
 ## Run
 
+The provider argument is the **instance ID configured in the deployment environment**.
+
 ```bash
 PYTHONPATH=. python eval/benchmark_runtime.py \
   --dataset eval/data/routing.jsonl \
-  --provider jev \
-  --model jev-latest \
+  --provider primary \
+  --model model-name-from-that-deployment \
   --task-type routing
 ```
 
-Repeat for every provider/model that should compete for the task.
+Repeat for every configured instance/model that should compete for the task.
 
-If actual provider pricing is known for the benchmark period, pass `--cost-per-1000`. If it is unknown, omit it rather than estimating it.
+If actual provider pricing is known for the benchmark period, pass
+`--cost-per-1000`. If it is unknown, omit it rather than estimating it.
 
 ## Select
 
@@ -46,7 +49,16 @@ Applications can omit `provider` and pass a policy:
 ```json
 {
   "state": "...",
-  "questions": {"route": {"type": "choice", "instructions": "...", "criteria": {"a": "...", "b": "..."}}},
+  "questions": {
+    "route": {
+      "type": "choice",
+      "instructions": "...",
+      "criteria": {
+        "a": "...",
+        "b": "..."
+      }
+    }
+  },
   "policy": {
     "task_type": "routing",
     "max_ece": 0.05,
@@ -56,7 +68,7 @@ Applications can omit `provider` and pass a policy:
 }
 ```
 
-Only models with measured records satisfying all constraints are eligible.
+Only measured instance/model records satisfying all constraints are eligible.
 
 ## What is measured
 
@@ -69,18 +81,24 @@ The benchmark harness records:
 - failure rate
 - optional known cost per 1,000 decisions
 
-The selection score then balances accuracy, calibration, latency, cost, reliability, and sample support.
+The selection score balances accuracy, calibration, latency, cost, reliability,
+and sample support.
 
 ## Provider replacement
 
-Applications call System One, not Jev or a specific general model. Re-benchmarking can therefore change the selected provider without changing application contracts.
+Applications call System One rather than a provider directly. The deployment
+may change an instance's endpoint/model through environment configuration, or
+benchmark a different instance, without changing the application contract.
 
 ## Ensemble
 
-For workloads where provider diversity is useful, callers may explicitly request:
+Callers may explicitly combine configured instances:
 
 ```json
-"ensemble": ["jev", "openai_compatible"]
+{
+  "ensemble": ["primary", "secondary"]
+}
 ```
 
-The runtime calls both and combines compatible probability outputs. This is opt-in because it increases latency and provider cost.
+The labels are deployment-defined. The runtime combines compatible probability
+outputs and makes no assumption about the vendor or model behind either label.
