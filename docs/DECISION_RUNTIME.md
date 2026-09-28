@@ -2,72 +2,127 @@
 
 System One is a provider-independent runtime for typed probabilistic decisions.
 
-## Stable contract
+## Stable application contract
 
-Use `POST /v2/decide` with:
+Applications call `POST /v2/decide` with:
 
-- `state`: application state or evidence
-- `questions`: typed `choice`, `score`, or `noul/null` questions
-- optional explicit `provider` and `model`
-- optional empirical `policy`
-- optional `ensemble` provider list
+- `state`
+- typed questions
+- optionally a provider **instance ID**
+- optionally a model override
+- optionally an empirical routing policy
+- optionally an ensemble of provider instance IDs
 
-The runtime normalizes provider-specific output into one response contract.
+Application code does not need to know which vendor, local server, or model sits behind an instance.
 
-## Provider model
+## Provider instances
 
-Providers are adapters. Current adapters:
+Provider instances are created from deployment configuration.
 
-- `openai_compatible`: existing logprob decision engine
-- `jev`: Jev System One API
+```env
+SYSTEMONE_PROVIDER_IDS=primary,secondary
+SYSTEMONE_DEFAULT_PROVIDER=primary
 
-Adding a provider must not require changing application callers.
+SYSTEMONE_PROVIDER_PRIMARY_DRIVER=openai_compatible
+SYSTEMONE_PROVIDER_PRIMARY_BASE_URL=https://example.invalid/v1
+SYSTEMONE_PROVIDER_PRIMARY_MODEL=model-from-this-deployment
+SYSTEMONE_PROVIDER_PRIMARY_API_KEY=secret-if-required
 
-## Empirical model selection
+SYSTEMONE_PROVIDER_SECONDARY_DRIVER=openai_compatible
+SYSTEMONE_PROVIDER_SECONDARY_BASE_URL=http://host.docker.internal:11434/v1
+SYSTEMONE_PROVIDER_SECONDARY_MODEL=another-model
+SYSTEMONE_PROVIDER_SECONDARY_API_KEY=
+```
 
-Benchmark records are persisted by provider, model, and task type. Selection can constrain:
+The labels `primary` and `secondary` are examples only. They have no built-in meaning.
+
+For an instance ID `foo-bar`, configuration uses the normalized prefix
+`SYSTEMONE_PROVIDER_FOO_BAR_*`.
+
+## Built-in protocol drivers
+
+### `openai_compatible`
+
+For any endpoint exposing compatible `/chat/completions` token logprobs.
+
+Configuration:
+
+- `BASE_URL`
+- `MODEL`
+- optional `API_KEY`
+- optional `TIMEOUT_S`
+- optional `MAX_PARALLEL`
+
+An API key is not required by the runtime because local endpoints may not use authentication.
+
+### `systemone_http`
+
+For any service exposing a compatible `/v1/systemone` contract.
+
+It is a protocol driver, not a vendor identity.
+
+### Custom Python drivers
+
+A deployment may load a custom provider class:
+
+```env
+SYSTEMONE_PROVIDER_CUSTOM_DRIVER=python:package.module:ProviderClass
+```
+
+This keeps new provider integrations out of application code.
+
+## Default selection
+
+There is no hardcoded default provider or model.
+
+- If `SYSTEMONE_DEFAULT_PROVIDER` is set, it is used.
+- Otherwise the first configured instance in `SYSTEMONE_PROVIDER_IDS` is used.
+- If no instance is configured and no application-registered provider exists, the runtime refuses the request with a configuration error.
+
+## Empirical selection
+
+Benchmark records are persisted by:
+
+```text
+provider-instance-id + model + task-type
+```
+
+Selection can constrain:
 
 - minimum measured accuracy
 - maximum ECE
 - maximum p95 latency
 - maximum cost per 1,000 decisions
-- provider preference
+- provider-instance preference
 
-Among eligible models, the runtime scores measured accuracy, calibration, latency, cost, reliability, and sample support. There is no unmeasured synthetic benchmark data.
-
-Use `eval/benchmark_runtime.py` with recorded labeled JSONL data to populate the benchmark store.
-
-## Ensemble mode
-
-Passing `ensemble: ["jev", "openai_compatible"]` calls both providers and combines compatible probability outputs. Failed providers are excluded if at least one provider succeeds.
+The router therefore selects from what is actually configured and measured in that environment. It does not contain a vendor preference.
 
 ## Calibration
 
-Versioned calibration profiles live independently from providers. A profile key is:
+Calibration profiles are versioned by:
 
-`provider:model:question_type:version`
+```text
+provider-instance-id:model:question-type:version
+```
 
-The original temperature-calibration machinery remains available for logprob-capable providers. Native provider probabilities can be benchmarked without forced post-hoc scaling.
+This allows the same model served from two different environments to be measured and calibrated independently.
 
 ## Observability
 
 Every provider call records:
 
-- request id
-- provider/model
+- request ID
+- provider instance ID
+- actual model
 - status
 - latency
-- actual reported token usage
+- reported token usage
 - question types
-
-`GET /v2/metrics` exposes a compact local summary. The JSONL store can later be exported to Prometheus/OpenTelemetry without changing provider contracts.
 
 ## RAG relationship
 
 RAG is an integration/example, not the identity of System One.
 
-- RAG answers: what evidence is available?
-- System One decides: what does the evidence imply?
-- Applications act on the typed decision.
-
-The runtime can consume evidence from this repository's example RAG service, the separate `rag-system`, Sivanta, or any other caller.
+- RAG retrieves evidence.
+- System One produces typed probabilistic decisions.
+- Applications consume the stable runtime contract.

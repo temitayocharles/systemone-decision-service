@@ -8,8 +8,8 @@ import httpx
 from .base import DecisionProvider, ProviderResult
 
 
-class JevProvider(DecisionProvider):
-    """Optional native System One adapter, configured only when explicitly declared."""
+class NativeSystemOneHTTPProvider(DecisionProvider):
+    """Generic adapter for services exposing a compatible /v1/systemone endpoint."""
 
     def __init__(
         self,
@@ -43,7 +43,7 @@ class JevProvider(DecisionProvider):
         payload = {
             "model": selected_model,
             "state": state,
-            "questions": {qid: _to_jev_question(q) for qid, q in questions.items()},
+            "questions": {qid: _to_native_question(q) for qid, q in questions.items()},
         }
         headers = {"Content-Type": "application/json"}
         if self.api_key:
@@ -64,7 +64,7 @@ class JevProvider(DecisionProvider):
             provider=self.name,
             model=data.get("model", selected_model),
             answers={
-                qid: _from_jev_answer(answer)
+                qid: _from_native_answer(answer)
                 for qid, answer in (data.get("answers") or {}).items()
             },
             usage=_normalize_usage(data.get("usage") or {}),
@@ -73,7 +73,7 @@ class JevProvider(DecisionProvider):
         )
 
 
-def _to_jev_question(question: Dict[str, Any]) -> Dict[str, Any]:
+def _to_native_question(question: Dict[str, Any]) -> Dict[str, Any]:
     q = dict(question)
     qtype = q.get("type")
     out: Dict[str, Any] = {
@@ -98,7 +98,7 @@ def _to_jev_question(question: Dict[str, Any]) -> Dict[str, Any]:
     return out
 
 
-def _from_jev_answer(answer: Dict[str, Any]) -> Dict[str, Any]:
+def _from_native_answer(answer: Dict[str, Any]) -> Dict[str, Any]:
     qtype = answer.get("type")
     if qtype == "choice":
         return {
@@ -124,10 +124,11 @@ def _from_jev_answer(answer: Dict[str, Any]) -> Dict[str, Any]:
 
 
 def _normalize_usage(usage: Dict[str, Any]) -> Dict[str, int]:
-    input_tokens = int(usage.get("input_tokens", 0) or 0)
-    output_tokens = int(usage.get("output_tokens", 0) or 0)
+    input_tokens = int(usage.get("input_tokens", usage.get("prompt_tokens", 0)) or 0)
+    output_tokens = int(usage.get("output_tokens", usage.get("completion_tokens", 0)) or 0)
+    total_tokens = int(usage.get("total_tokens", input_tokens + output_tokens) or 0)
     return {
         "prompt_tokens": input_tokens,
         "completion_tokens": output_tokens,
-        "total_tokens": input_tokens + output_tokens,
+        "total_tokens": total_tokens,
     }

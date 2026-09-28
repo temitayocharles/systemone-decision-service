@@ -73,7 +73,7 @@ async def runtime_batch(payload: BatchRequest):
 @app.get("/v2/providers")
 async def providers():
     return {
-        "providers": list(runtime.providers.names()),
+        "providers": runtime.providers.describe(),
         "default": runtime.default_provider,
     }
 
