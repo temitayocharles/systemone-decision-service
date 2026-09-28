@@ -38,13 +38,16 @@ class OpenAICompatibleProvider(DecisionProvider):
 
     def _engine_for(self, model: str) -> ConfigurableScalableDecisionEngine:
         if model not in self._engines:
+            temperatures = self._temperatures_for(model)
+            if "null" in temperatures:
+                temperatures["noul"] = temperatures["null"]
             self._engines[model] = ConfigurableScalableDecisionEngine(
                 base_url=self.base_url,
                 model=model,
                 api_key=self.api_key,
                 timeout_s=self.timeout_s,
                 max_parallel=self.max_parallel,
-                temperatures=self._temperatures_for(model) or None,
+                temperatures=temperatures or None,
             )
         return self._engines[model]
 
@@ -101,8 +104,13 @@ def _normalize_question(question: Dict[str, Any]) -> Dict[str, Any]:
     qtype = q.get("type")
     if "instructions" in q and "prompt" not in q:
         q["prompt"] = q["instructions"]
-    if qtype in {"noul", "binary", "abstain"}:
-        q["type"] = "null"
+
+    # The public System One contract is "null". The low-level engine retains
+    # its historical internal "noul" discriminator, so translate only at this
+    # provider boundary and normalize the answer back on egress.
+    if qtype in {"null", "noul", "binary", "abstain"}:
+        q["type"] = "noul"
+
     if q["type"] == "choice" and "criteria" in q and "options" not in q:
         q["options"] = q["criteria"]
     if q["type"] == "score" and "criteria" in q and "labels" not in q:
