@@ -7,7 +7,7 @@ from typing import Any, Dict, Iterable, Mapping, Optional
 
 from .providers.base import ProviderResult
 from .providers.registry import ProviderRegistry
-from .selection import BenchmarkStore, ModelStats, SelectionPolicy, choose_model
+from .selection import BenchmarkStore, SelectionPolicy, choose_model
 from .telemetry import TelemetryStore
 
 
@@ -16,7 +16,8 @@ class DecisionRuntime:
         self.providers = ProviderRegistry()
         self.benchmarks = BenchmarkStore()
         self.telemetry = TelemetryStore()
-        self.default_provider = os.getenv("SYSTEMONE_DEFAULT_PROVIDER", "openai_compatible")
+        configured_default = os.getenv("SYSTEMONE_DEFAULT_PROVIDER", "").strip()
+        self.default_provider = configured_default or self.providers.first_name()
 
     async def decide(
         self,
@@ -42,7 +43,7 @@ class DecisionRuntime:
             successes = [r for r in results if isinstance(r, ProviderResult)]
             if not successes:
                 errors = [str(r) for r in results]
-                raise RuntimeError(f"all ensemble providers failed: {errors}")
+                raise RuntimeError(f"all ensemble provider instances failed: {errors}")
             merged = _merge_results(successes)
             return {
                 "request_id": rid,
@@ -53,11 +54,16 @@ class DecisionRuntime:
         selected_provider = provider
         selected_model = model
         if selected_provider is None and policy is not None:
-            stats = self.benchmarks.load()
-            selected = choose_model(stats, policy)
+            selected = choose_model(self.benchmarks.load(), policy)
             selected_provider = selected.provider
             selected_model = selected.model
+
         selected_provider = selected_provider or self.default_provider
+        if not selected_provider:
+            raise RuntimeError(
+                "no provider instance is configured; set SYSTEMONE_PROVIDER_IDS "
+                "or specify a provider registered by the host application"
+            )
 
         result = await self._invoke(
             selected_provider,
