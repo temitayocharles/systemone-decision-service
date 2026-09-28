@@ -3,26 +3,47 @@ from __future__ import annotations
 import time
 from typing import Any, Dict, Mapping, Optional
 
-from .. import config
 from ..calibration_profiles import CalibrationProfileStore
-from ..engine_v2 import ScalableDecisionEngine
+from ..engine_v2 import ConfigurableScalableDecisionEngine
 from .base import DecisionProvider, ProviderResult
 
 
 class OpenAICompatibleProvider(DecisionProvider):
-    name = "openai_compatible"
+    def __init__(
+        self,
+        *,
+        name: str,
+        base_url: str,
+        model: str,
+        api_key: str = "",
+        timeout_s: float = 60.0,
+        max_parallel: int = 8,
+    ) -> None:
+        self.name = name
+        self.base_url = base_url
+        self.default_model = model
+        self.api_key = api_key
+        self.timeout_s = timeout_s
+        self.max_parallel = max_parallel
+        self._engines: Dict[str, ConfigurableScalableDecisionEngine] = {}
 
-    def __init__(self) -> None:
-        self.model = config.MODEL
-        self.engine = ScalableDecisionEngine()
-        self._apply_calibration_profiles()
-
-    def _apply_calibration_profiles(self) -> None:
-        store = CalibrationProfileStore()
-        for question_type in ("choice", "score", "null"):
-            profile = store.get(self.name, self.model, question_type)
-            if profile is not None:
-                self.engine.temperatures[question_type] = profile.temperature
+    def _engine_for(self, model: str) -> ConfigurableScalableDecisionEngine:
+        if model not in self._engines:
+            temperatures = {}
+            store = CalibrationProfileStore()
+            for question_type in ("choice", "score", "null"):
+                profile = store.get(self.name, model, question_type)
+                if profile is not None:
+                    temperatures[question_type] = profile.temperature
+            self._engines[model] = ConfigurableScalableDecisionEngine(
+                base_url=self.base_url,
+                model=model,
+                api_key=self.api_key,
+                timeout_s=self.timeout_s,
+                max_parallel=self.max_parallel,
+                temperatures=temperatures or None,
+            )
+        return self._engines[model]
 
     async def decide(
         self,
@@ -32,26 +53,26 @@ class OpenAICompatibleProvider(DecisionProvider):
         model: Optional[str] = None,
         idempotency_key: Optional[str] = None,
     ) -> ProviderResult:
-        requested_model = model or self.model
-        if requested_model != self.model:
-            raise RuntimeError(
-                f"openai_compatible is configured for {self.model!r}; "
-                f"requested model {requested_model!r} is not configured in this provider instance"
-            )
+        selected_model = model or self.default_model
+        if not selected_model:
+            raise RuntimeError(f"provider instance {self.name!r} has no model configured")
 
+        engine = self._engine_for(selected_model)
         started = time.perf_counter()
         normalized = {qid: _normalize_question(q) for qid, q in questions.items()}
-        results, usage = await self.engine.decide(str(state), normalized)
+        results, usage = await engine.decide(str(state), normalized)
         return ProviderResult(
             provider=self.name,
-            model=self.model,
+            model=selected_model,
             answers=results,
             usage=usage,
             latency_ms=int((time.perf_counter() - started) * 1000),
         )
 
     async def aclose(self) -> None:
-        await self.engine.aclose()
+        for engine in self._engines.values():
+            await engine.aclose()
+        self._engines.clear()
 
 
 def _normalize_question(question: Dict[str, Any]) -> Dict[str, Any]:
