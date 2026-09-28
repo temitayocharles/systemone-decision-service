@@ -98,7 +98,8 @@ def _build_provider(instance: ProviderInstance) -> DecisionProvider:
     if instance.driver.startswith("python:"):
         return _load_plugin(instance.driver, instance)
     raise ValueError(
-        f"unsupported driver {instance.driver!r} for provider instance {instance.instance_id!r}"
+        f"unsupported driver {instance.driver!r} "
+        f"for provider instance {instance.instance_id!r}"
     )
 
 
@@ -125,6 +126,16 @@ class ProviderRegistry:
             return self._providers[name]
         except KeyError as exc:
             raise KeyError(f"unknown provider instance: {name}") from exc
+
+    async def refresh_calibration(
+        self,
+        provider_name: str,
+        model: Optional[str] = None,
+    ) -> None:
+        provider = self.get(provider_name)
+        refresh = getattr(provider, "refresh_calibration", None)
+        if refresh is not None:
+            await refresh(model)
 
     def names(self) -> Iterable[str]:
         return tuple(self._providers)

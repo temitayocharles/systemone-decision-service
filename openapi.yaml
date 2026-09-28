@@ -1,7 +1,7 @@
 openapi: 3.0.3
 info:
   title: System One Decision Runtime
-  version: 0.2.0
+  version: 0.3.0
   description: Provider-independent runtime for typed probabilistic decisions.
 servers:
   - url: http://localhost:8002
@@ -24,15 +24,11 @@ paths:
       responses:
         '200':
           description: Decision result
-          content:
-            application/json:
-              schema:
-                type: object
         '502':
           description: Routing, provider, or inference failure
   /v2/batch:
     post:
-      summary: Execute a batch of decision requests
+      summary: Execute isolated decision requests as one batch
       requestBody:
         required: true
         content:
@@ -49,7 +45,7 @@ paths:
                     $ref: '#/components/schemas/RuntimeRequest'
       responses:
         '200':
-          description: Batch results
+          description: Per-item success or error results
   /v2/providers:
     get:
       summary: List configured provider instances and capabilities
@@ -59,14 +55,6 @@ paths:
   /v2/metrics:
     get:
       summary: Runtime telemetry summary
-      parameters:
-        - in: query
-          name: limit
-          schema:
-            type: integer
-            minimum: 1
-            maximum: 10000
-            default: 1000
       responses:
         '200':
           description: Runtime metrics
@@ -77,7 +65,7 @@ paths:
         '200':
           description: Benchmark records
     put:
-      summary: Upsert an empirical benchmark record
+      summary: Upsert a benchmark record with provenance
       requestBody:
         required: true
         content:
@@ -87,6 +75,20 @@ paths:
       responses:
         '200':
           description: Benchmark record persisted
+  /v2/calibration/fit:
+    post:
+      summary: Fit and persist a calibration profile
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CalibrationFitRequest'
+      responses:
+        '200':
+          description: Persisted calibration profile
+        '422':
+          description: Invalid or insufficient calibration observations
 components:
   schemas:
     RuntimeRequest:
@@ -160,7 +162,13 @@ components:
           default: true
     BenchmarkRecord:
       type: object
-      required: [provider, model, task_type]
+      required:
+        - provider
+        - model
+        - task_type
+        - run_id
+        - dataset_sha256
+        - created_at
       properties:
         provider:
           type: string
@@ -170,7 +178,6 @@ components:
           type: string
         samples:
           type: integer
-          default: 0
         accuracy:
           type: number
           nullable: true
@@ -185,4 +192,32 @@ components:
           nullable: true
         failure_rate:
           type: number
-          default: 0
+        run_id:
+          type: string
+        dataset_sha256:
+          type: string
+          minLength: 64
+          maxLength: 64
+        created_at:
+          type: string
+        dataset_path:
+          type: string
+    CalibrationFitRequest:
+      type: object
+      required: [provider, model, question_type, examples]
+      properties:
+        provider:
+          type: string
+        model:
+          type: string
+        question_type:
+          type: string
+          enum: [choice, score, null, noul]
+        version:
+          type: string
+          nullable: true
+        examples:
+          type: array
+          minItems: 20
+          items:
+            type: object

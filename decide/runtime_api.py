@@ -129,6 +129,10 @@ async def calibration_fit(payload: CalibrationFitRequest):
             examples=payload.examples,
             version=payload.version,
         )
+        await runtime.providers.refresh_calibration(
+            payload.provider,
+            payload.model,
+        )
         return profile_dict(profile)
     except (KeyError, TypeError, ValueError) as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc

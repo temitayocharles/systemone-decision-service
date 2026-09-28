@@ -18,12 +18,16 @@ A benchmark record contains:
 - p95 latency
 - failure rate
 - optional known cost per 1,000 decisions
+- run ID
+- dataset SHA-256
+- creation timestamp
+- dataset path
+
+The provenance fields are mandatory when a benchmark is persisted.
 
 ## Dataset format
 
 Benchmark workloads use JSONL.
-
-Example:
 
 ```json
 {
@@ -40,7 +44,7 @@ Example:
 }
 ```
 
-Use labelled workloads representative of the target task.
+The repository includes `eval/data/routing.jsonl` as a small pipeline fixture. Use representative labelled workloads for model comparisons and performance claims.
 
 ## Running a benchmark
 
@@ -52,7 +56,7 @@ PYTHONPATH=. python eval/benchmark_runtime.py \
   --task-type routing
 ```
 
-Repeat for each configured provider/model combination intended to compete for that task.
+The harness computes the dataset SHA-256 and run metadata automatically.
 
 If reliable pricing is known, pass `--cost-per-1000`. Otherwise leave cost unset.
 
@@ -84,14 +88,9 @@ Eligible candidates are compared using:
 - reliability
 - benchmark sample support
 
-The selector therefore separates two questions:
-
-1. **Can this provider/model satisfy the request?**
-2. **Among eligible candidates, which has the strongest measured performance for the task?**
+The selector separates eligibility from empirical ranking.
 
 ## Benchmark storage
-
-The benchmark store is configured with:
 
 ```env
 SYSTEMONE_BENCHMARK_FILE=/path/to/benchmarks.json
@@ -101,4 +100,4 @@ If unset, the runtime uses its default data path.
 
 ## Runtime use
 
-Applications may route explicitly or omit the provider and pass a selection policy. The runtime then resolves the best eligible benchmarked candidate and invokes the corresponding configured provider instance.
+Applications may route explicitly or omit the provider and pass a selection policy. The runtime resolves the best eligible benchmarked candidate and invokes the corresponding configured provider instance.

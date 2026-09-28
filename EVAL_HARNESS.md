@@ -1,10 +1,12 @@
 # Evaluation Harness
 
-The evaluation tooling measures decision quality and calibration from labelled workloads.
+The evaluation tooling measures decision quality, calibration, reliability, and runtime performance from labelled workloads.
 
-## Benchmark runtime
+## Live benchmark runner
 
-`eval/benchmark_runtime.py` executes a labelled dataset against a configured provider instance and records:
+`eval/benchmark_runtime.py` executes a labelled JSONL dataset against a configured provider instance.
+
+It records:
 
 - sample count
 - exact-label accuracy
@@ -12,6 +14,10 @@ The evaluation tooling measures decision quality and calibration from labelled w
 - p95 latency
 - failure rate
 - optional known cost per 1,000 decisions
+- run ID
+- dataset SHA-256
+- UTC creation timestamp
+- dataset path
 
 Example:
 
@@ -23,7 +29,7 @@ PYTHONPATH=. python eval/benchmark_runtime.py \
   --task-type routing
 ```
 
-The resulting benchmark record is persisted in the runtime benchmark store.
+The fixture under `eval/data/` verifies the pipeline shape. Replace or supplement it with representative labelled workloads for real comparisons.
 
 ## Offline evaluator
 
@@ -42,53 +48,44 @@ The evaluator reports:
 - expected calibration error
 - reliability diagram data
 
-## Labelled decision datasets
+## Calibration fitting
 
-Runtime benchmark rows contain:
+The canonical runtime endpoint is:
+
+```text
+POST /v2/calibration/fit
+```
+
+Binary/null observations:
 
 ```json
 {
-  "state": "input state",
-  "question": {
-    "type": "choice",
-    "instructions": "Select the correct option.",
-    "criteria": {
-      "a": "Option A",
-      "b": "Option B"
-    }
-  },
-  "label": "a"
+  "probability": 0.82,
+  "label": 1
 }
 ```
 
-The label format follows the question type:
+Choice/score observations:
 
-- choice: option key
-- score: numeric score
-- null/noul: expected proposition outcome
+```json
+{
+  "probabilities": [0.2, 0.7, 0.1],
+  "label_index": 1
+}
+```
 
-Datasets should represent the workload and task distribution used in production.
+Raw logits can be supplied instead of probabilities.
 
-## Calibration workflow
-
-Calibration is fitted from labelled examples and persisted by provider instance, model, question type, and profile version.
-
-Evaluation should compare calibration before and after fitting and retain:
-
-- ECE
-- accuracy
-- sample count
-- reliability diagram data
+Calibration profiles are persisted by provider instance, model, question type, and version. Compatible running provider engines reload the new profile after fitting.
 
 ## Measurement principles
-
-Performance numbers are recorded only from executed workloads.
 
 For meaningful comparisons:
 
 - use the same labelled dataset across competing provider/model combinations
 - use comparable runtime conditions
-- report the benchmark sample count
-- keep task types separate where their distributions differ
-- record cost only when the source value is known
-- rerun benchmarks when the model, serving configuration, or calibration profile changes
+- report sample count and dataset hash
+- keep materially different task distributions separate
+- record cost only when known
+- rerun after model, serving configuration, or calibration changes
+- distinguish fixture validation from production evidence
