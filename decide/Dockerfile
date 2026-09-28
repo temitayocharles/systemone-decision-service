@@ -12,4 +12,5 @@ COPY . /app
 
 EXPOSE 8002
 
-CMD ["python", "-m", "decide.app"]
+# runtime_api imports the legacy FastAPI app, preserving /v1 routes while adding /v2.
+CMD ["python", "-m", "decide.runtime_api"]
