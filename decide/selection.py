@@ -3,9 +3,11 @@ from __future__ import annotations
 import json
 import math
 import os
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, field
 from pathlib import Path
-from typing import Dict, Iterable, List, Optional, Tuple
+from typing import Any, Dict, Iterable, List, Mapping, Optional, Tuple
+
+from .capabilities import CapabilityProfile
 
 
 @dataclass
@@ -29,6 +31,12 @@ class SelectionPolicy:
     max_cost_per_1000: Optional[float] = None
     min_accuracy: Optional[float] = None
     preferred_provider: Optional[str] = None
+    required_capabilities: List[str] = field(default_factory=list)
+    forbidden_capabilities: List[str] = field(default_factory=list)
+    min_attributes: Dict[str, float] = field(default_factory=dict)
+    max_attributes: Dict[str, float] = field(default_factory=dict)
+    attribute_equals: Dict[str, Any] = field(default_factory=dict)
+    require_healthy: bool = True
 
 
 class BenchmarkStore:
@@ -68,13 +76,46 @@ class BenchmarkStore:
 def choose_model(
     candidates: Iterable[ModelStats],
     policy: SelectionPolicy,
+    *,
+    capabilities: Optional[Mapping[str, CapabilityProfile]] = None,
+    health: Optional[Mapping[str, bool]] = None,
 ) -> ModelStats:
     eligible = []
+    capabilities = capabilities or {}
+    health = health or {}
+
     for stat in candidates:
         if stat.task_type not in {policy.task_type, "generic"}:
             continue
         if policy.preferred_provider and stat.provider != policy.preferred_provider:
             continue
+
+        profile = capabilities.get(stat.provider)
+        has_capability_constraints = bool(
+            policy.required_capabilities
+            or policy.forbidden_capabilities
+            or policy.min_attributes
+            or policy.max_attributes
+            or policy.attribute_equals
+        )
+        if has_capability_constraints:
+            if profile is None:
+                continue
+            if not profile.supports(
+                policy.required_capabilities,
+                policy.forbidden_capabilities,
+            ):
+                continue
+            if not profile.attributes_match(
+                minimum=policy.min_attributes,
+                maximum=policy.max_attributes,
+                equals=policy.attribute_equals,
+            ):
+                continue
+
+        if policy.require_healthy and health.get(stat.provider) is False:
+            continue
+
         if policy.max_ece is not None and (
             stat.ece is None or stat.ece > policy.max_ece
         ):
@@ -96,7 +137,9 @@ def choose_model(
         eligible.append(stat)
 
     if not eligible:
-        raise LookupError("no empirically qualified model satisfies the selection policy")
+        raise LookupError(
+            "no empirically qualified model satisfies capability, health, and performance policy"
+        )
 
     def score(s: ModelStats) -> float:
         accuracy = s.accuracy if s.accuracy is not None else 0.5
