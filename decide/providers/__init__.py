@@ -1,12 +1,12 @@
 from .base import DecisionProvider, ProviderResult
-from .jev import JevProvider
 from .openai_compatible import OpenAICompatibleProvider
 from .registry import ProviderRegistry
+from .systemone_http import NativeSystemOneHTTPProvider
 
 __all__ = [
     "DecisionProvider",
     "ProviderResult",
-    "JevProvider",
     "OpenAICompatibleProvider",
+    "NativeSystemOneHTTPProvider",
     "ProviderRegistry",
 ]
