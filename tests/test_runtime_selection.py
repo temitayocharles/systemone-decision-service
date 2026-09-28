@@ -5,8 +5,8 @@ from rag.app.store import VectorStore
 def test_empirical_selection_respects_constraints():
     candidates = [
         ModelStats(
-            provider="jev",
-            model="jev-a",
+            provider="instance-a",
+            model="model-a",
             task_type="routing",
             samples=100,
             accuracy=0.91,
@@ -15,8 +15,8 @@ def test_empirical_selection_respects_constraints():
             cost_per_1000=0.1,
         ),
         ModelStats(
-            provider="other",
-            model="other-a",
+            provider="instance-b",
+            model="model-b",
             task_type="routing",
             samples=100,
             accuracy=0.95,
@@ -29,7 +29,7 @@ def test_empirical_selection_respects_constraints():
         candidates,
         SelectionPolicy(task_type="routing", max_ece=0.05),
     )
-    assert chosen.provider == "jev"
+    assert chosen.provider == "instance-a"
 
 
 def test_document_ids_are_deterministic_and_collection_scoped():
