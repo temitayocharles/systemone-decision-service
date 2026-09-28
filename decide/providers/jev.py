@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import os
 import time
 from typing import Any, Dict, Mapping, Optional
 
@@ -10,13 +9,22 @@ from .base import DecisionProvider, ProviderResult
 
 
 class JevProvider(DecisionProvider):
-    name = "jev"
+    """Optional native System One adapter, configured only when explicitly declared."""
 
-    def __init__(self) -> None:
-        self.base_url = os.getenv("JEV_BASE_URL", "https://jevmodel.org").rstrip("/")
-        self.api_key = os.getenv("JEVMODEL_API_KEY", "")
-        self.default_model = os.getenv("JEV_MODEL", "jev-latest")
-        self.timeout_s = float(os.getenv("JEV_TIMEOUT_S", "20"))
+    def __init__(
+        self,
+        *,
+        name: str,
+        base_url: str,
+        model: str,
+        api_key: str = "",
+        timeout_s: float = 20.0,
+    ) -> None:
+        self.name = name
+        self.base_url = base_url.rstrip("/")
+        self.api_key = api_key
+        self.default_model = model
+        self.timeout_s = float(timeout_s)
 
     async def decide(
         self,
@@ -26,18 +34,20 @@ class JevProvider(DecisionProvider):
         model: Optional[str] = None,
         idempotency_key: Optional[str] = None,
     ) -> ProviderResult:
-        if not self.api_key:
-            raise RuntimeError("JEVMODEL_API_KEY is not configured")
+        if not self.base_url:
+            raise RuntimeError(f"provider instance {self.name!r} has no base URL configured")
+        selected_model = model or self.default_model
+        if not selected_model:
+            raise RuntimeError(f"provider instance {self.name!r} has no model configured")
 
         payload = {
-            "model": model or self.default_model,
+            "model": selected_model,
             "state": state,
             "questions": {qid: _to_jev_question(q) for qid, q in questions.items()},
         }
-        headers = {
-            "Authorization": f"Bearer {self.api_key}",
-            "Content-Type": "application/json",
-        }
+        headers = {"Content-Type": "application/json"}
+        if self.api_key:
+            headers["Authorization"] = f"Bearer {self.api_key}"
         if idempotency_key:
             headers["Idempotency-Key"] = idempotency_key[:100]
 
@@ -52,7 +62,7 @@ class JevProvider(DecisionProvider):
         data = response.json()
         return ProviderResult(
             provider=self.name,
-            model=data.get("model", payload["model"]),
+            model=data.get("model", selected_model),
             answers={
                 qid: _from_jev_answer(answer)
                 for qid, answer in (data.get("answers") or {}).items()
@@ -114,10 +124,10 @@ def _from_jev_answer(answer: Dict[str, Any]) -> Dict[str, Any]:
 
 
 def _normalize_usage(usage: Dict[str, Any]) -> Dict[str, int]:
+    input_tokens = int(usage.get("input_tokens", 0) or 0)
+    output_tokens = int(usage.get("output_tokens", 0) or 0)
     return {
-        "prompt_tokens": int(usage.get("input_tokens", 0) or 0),
-        "completion_tokens": int(usage.get("output_tokens", 0) or 0),
-        "total_tokens": int(
-            (usage.get("input_tokens", 0) or 0) + (usage.get("output_tokens", 0) or 0)
-        ),
+        "prompt_tokens": input_tokens,
+        "completion_tokens": output_tokens,
+        "total_tokens": input_tokens + output_tokens,
     }
