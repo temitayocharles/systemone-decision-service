@@ -1,10 +1,9 @@
-import pytest
+import asyncio
 
 from decide.runtime import DecisionRuntime
 
 
-@pytest.mark.asyncio
-async def test_batch_returns_item_errors_without_failing_whole_batch(monkeypatch):
+def test_batch_returns_item_errors_without_failing_whole_batch(monkeypatch):
     runtime = DecisionRuntime()
 
     async def fake_decide(**kwargs):
@@ -14,10 +13,10 @@ async def test_batch_returns_item_errors_without_failing_whole_batch(monkeypatch
 
     monkeypatch.setattr(runtime, "decide", fake_decide)
 
-    results = await runtime.batch([
+    results = asyncio.run(runtime.batch([
         {"state": "good", "questions": {"q": {"type": "null"}}},
         {"state": "bad", "questions": {"q": {"type": "null"}}},
-    ])
+    ]))
 
     assert results[0]["ok"] is True
     assert results[1]["ok"] is False
