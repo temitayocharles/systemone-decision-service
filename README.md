@@ -180,6 +180,7 @@ The repository includes:
 - `eval/benchmark_runtime.py` for live provider/model benchmarking
 - `eval/evaluate.py` for offline scoring
 - `eval/data/` for pipeline fixtures
+- `scripts/certify_runtime.py` for live end-to-end provider certification
 - `EVAL_HARNESS.md` for measurement contracts
 
 Performance claims require executed labelled workloads.
@@ -207,13 +208,15 @@ eval/       benchmark and evaluation tooling
 rag/        optional RAG example service
 corpora/    example retrieval corpora
 demo/       integration examples
-docs/       runtime architecture and routing documentation
+scripts/    operational certification tooling
+docs/       runtime architecture, routing, and runbook
 tests/      unit and contract tests
 openapi.yaml
 ```
 
 ## Documentation
 
+- [Operational Runbook](docs/RUNBOOK.md)
 - [Decision Runtime](docs/DECISION_RUNTIME.md)
 - [Capability Routing](docs/CAPABILITY_ROUTING.md)
 - [Empirical Selection](docs/EMPIRICAL_SELECTION.md)
