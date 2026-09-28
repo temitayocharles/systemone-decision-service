@@ -1,45 +1,72 @@
-# Capability-aware empirical routing
+# Capability Routing
 
-System One routes by **requirements**, not vendor identity.
+System One selects provider instances by requirements and measured performance.
 
-Each configured provider instance has:
+## Capability profile
 
-1. a protocol driver,
-2. an endpoint/model,
-3. a capability set,
-4. typed attributes,
-5. empirical benchmark records,
-6. observed runtime health.
+Each provider instance has:
 
-## Capability declarations
+- protocol-derived capabilities
+- deployment-declared capabilities
+- typed attributes
+- empirical benchmark records
+- observed runtime health
 
 Example:
 
 ```env
-SYSTEMONE_PROVIDER_PRIVATE_CAPABILITIES=private_runtime,multimodal
+SYSTEMONE_PROVIDER_PRIVATE_CAPABILITIES=private_runtime,multimodal,structured_output
 SYSTEMONE_PROVIDER_PRIVATE_ATTRIBUTES_JSON={"local":true,"max_context":32768,"region":"ca-central"}
 ```
 
-Capability names are deliberately open-ended. Adding a future capability does
-not require changing the registry schema.
+Capability names are open-ended.
 
-Drivers also add capabilities implied by their protocol. For example,
-`openai_compatible` currently contributes:
+## Protocol-derived capabilities
+
+The built-in drivers contribute baseline capabilities automatically.
+
+### openai_compatible
 
 - `chat_completions`
 - `token_logprobs`
 - `probabilistic_decisions`
 
-## Routing policy
+### systemone_http
 
-A caller can ask for requirements rather than a provider:
+- `native_systemone`
+- `probabilistic_decisions`
+
+Custom drivers may declare additional deployment capabilities.
+
+## Typed attributes
+
+Attributes express non-boolean properties.
+
+Examples:
+
+```json
+{
+  "local": true,
+  "max_context": 32768,
+  "region": "ca-central"
+}
+```
+
+Routing policies can require exact values or numeric minimum/maximum bounds.
+
+## Routing policy
 
 ```json
 {
   "policy": {
     "task_type": "incident-triage",
-    "required_capabilities": ["token_logprobs", "private_runtime"],
-    "forbidden_capabilities": ["external_network"],
+    "required_capabilities": [
+      "token_logprobs",
+      "private_runtime"
+    ],
+    "forbidden_capabilities": [
+      "external_network"
+    ],
     "attribute_equals": {
       "local": true
     },
@@ -53,54 +80,40 @@ A caller can ask for requirements rather than a provider:
 }
 ```
 
-Selection proceeds in this order:
+## Selection pipeline
 
-1. task compatibility
-2. capability requirements
-3. attribute requirements
+Selection is performed in this order:
+
+1. task-type compatibility
+2. required and forbidden capabilities
+3. attribute constraints
 4. observed health
-5. empirical performance constraints
-6. empirical scoring among survivors
+5. empirical performance thresholds
+6. empirical scoring among eligible candidates
 
-This means a highly accurate model that lacks a required capability is never
-selected simply because its benchmark score is high.
+Capability eligibility is resolved before benchmark ranking.
 
-## Health-aware eligibility
+## Health state
 
-The runtime derives current observed health from the latest telemetry event for
-each instance.
+Current observed health is derived from the latest telemetry event for each provider instance.
 
-- latest successful call -> healthy
-- latest failed call -> unhealthy
-- no observation -> unknown
+- latest successful call: healthy
+- latest failed call: unhealthy
+- no observation: unknown
 
-Unknown is not treated as a failure. A known-unhealthy instance is excluded by
-default when empirical routing is used. Set `require_healthy: false` in a
-policy when that behavior is not wanted.
+A known-unhealthy instance is excluded by default during empirical routing. Set `require_healthy: false` when a policy should ignore observed health.
 
-## Why capabilities and attributes are separate
+## Extensibility
 
-Capabilities are boolean properties such as:
+Capabilities and attributes intentionally use an open schema. New model-server features can be represented without changing the application API or registry data model.
 
-- `token_logprobs`
+Examples of deployment-defined capabilities may include:
+
+- `streaming`
 - `multimodal`
 - `structured_output`
 - `private_runtime`
+- `tool_calling`
+- `long_context`
 
-Attributes carry typed values such as:
-
-- `max_context: 32768`
-- `local: true`
-- `region: "ca-central"`
-
-The schema remains open-ended so future inference systems can introduce new
-properties without changes to application contracts.
-
-## Empirical routing remains authoritative
-
-Capabilities decide **what can satisfy the request**.
-
-Benchmarks decide **which eligible option performs best for the task**.
-
-The combination avoids both vendor hardcoding and capability-blind model
-ranking.
+The runtime remains centered on requirements rather than vendor identity.
