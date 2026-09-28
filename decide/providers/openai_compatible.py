@@ -27,23 +27,35 @@ class OpenAICompatibleProvider(DecisionProvider):
         self.max_parallel = max_parallel
         self._engines: Dict[str, ConfigurableScalableDecisionEngine] = {}
 
+    def _temperatures_for(self, model: str) -> Dict[str, float]:
+        temperatures: Dict[str, float] = {}
+        store = CalibrationProfileStore()
+        for question_type in ("choice", "score", "null"):
+            profile = store.get(self.name, model, question_type)
+            if profile is not None:
+                temperatures[question_type] = profile.temperature
+        return temperatures
+
     def _engine_for(self, model: str) -> ConfigurableScalableDecisionEngine:
         if model not in self._engines:
-            temperatures = {}
-            store = CalibrationProfileStore()
-            for question_type in ("choice", "score", "null"):
-                profile = store.get(self.name, model, question_type)
-                if profile is not None:
-                    temperatures[question_type] = profile.temperature
             self._engines[model] = ConfigurableScalableDecisionEngine(
                 base_url=self.base_url,
                 model=model,
                 api_key=self.api_key,
                 timeout_s=self.timeout_s,
                 max_parallel=self.max_parallel,
-                temperatures=temperatures or None,
+                temperatures=self._temperatures_for(model) or None,
             )
         return self._engines[model]
+
+    async def refresh_calibration(self, model: Optional[str] = None) -> None:
+        targets = [model] if model else list(self._engines)
+        for target in targets:
+            if not target:
+                continue
+            engine = self._engines.pop(target, None)
+            if engine is not None:
+                await engine.aclose()
 
     async def decide(
         self,
@@ -55,11 +67,16 @@ class OpenAICompatibleProvider(DecisionProvider):
     ) -> ProviderResult:
         selected_model = model or self.default_model
         if not selected_model:
-            raise RuntimeError(f"provider instance {self.name!r} has no model configured")
+            raise RuntimeError(
+                f"provider instance {self.name!r} has no model configured"
+            )
 
         engine = self._engine_for(selected_model)
         started = time.perf_counter()
-        normalized = {qid: _normalize_question(q) for qid, q in questions.items()}
+        normalized = {
+            qid: _normalize_question(q)
+            for qid, q in questions.items()
+        }
         results, usage = await engine.decide(str(state), normalized)
         return ProviderResult(
             provider=self.name,

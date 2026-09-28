@@ -7,6 +7,8 @@ import time
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional
 
+from .statistics import percentile_nearest_rank
+
 
 class TelemetryStore:
     def __init__(self, path: Optional[str] = None) -> None:
@@ -43,11 +45,10 @@ def summarize(events: Iterable[Dict[str, Any]]) -> Dict[str, Any]:
     rows = list(events)
     if not rows:
         return {"count": 0}
-    latencies = sorted(float(r.get("latency_ms", 0)) for r in rows)
-    idx = min(len(latencies) - 1, max(0, int(round(0.95 * (len(latencies) - 1)))))
+    latencies = [float(r.get("latency_ms", 0)) for r in rows]
     return {
         "count": len(rows),
-        "p95_latency_ms": latencies[idx],
+        "p95_latency_ms": percentile_nearest_rank(latencies, 0.95),
         "failures": sum(1 for r in rows if r.get("status") != "ok"),
         "tokens": sum(int((r.get("usage") or {}).get("total_tokens", 0)) for r in rows),
     }
