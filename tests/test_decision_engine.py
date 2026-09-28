@@ -91,7 +91,7 @@ def test_temperature_scaling_changes_distribution(monkeypatch):
     run(hot.aclose())
 
 
-def test_null_returns_probability_of_yes(monkeypatch):
+def test_noul_engine_output_is_probability_of_yes(monkeypatch):
     monkeypatch.setattr(
         DecisionEngine,
         "_logprobs_for",
@@ -101,7 +101,7 @@ def test_null_returns_probability_of_yes(monkeypatch):
         temperatures={"choice": 1.0, "score": 1.0, "null": 1.0}
     )
     ans = run(eng.evaluate_noul("is it true?", "state"))
-    assert ans["type"] == "null"
+    assert ans["type"] == "noul"
     assert 0.5 < ans["value"] < 1.0
     assert ans["confidence"] == pytest.approx(ans["value"])
     run(eng.aclose())
@@ -122,7 +122,7 @@ def test_score_picks_best_point(monkeypatch):
     run(eng.aclose())
 
 
-def test_unconfigured_legacy_engine_fails_closed(monkeypatch):
+def test_unconfigured_engine_fails_closed(monkeypatch):
     monkeypatch.setattr(config, "API_KEY", "")
     eng = DecisionEngine()
     with pytest.raises(EngineError):
