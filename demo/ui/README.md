@@ -1,24 +1,39 @@
 # System One UI
 
-A browser-first workspace for using the System One Decision Runtime and the RAG example service without writing API commands.
+A browser-first product workspace for the System One Decision Runtime and the RAG evidence layer.
 
-The interface is intentionally white, minimal, responsive, and focused on non-technical workflows.
+## Product flow
 
-## What users can do
+The main action is **Ask System One**. One click runs the complete connected workflow:
 
-- choose the Engineering or Business knowledge collection
-- index the selected built-in collection
-- ask a question in plain English
-- review retrieved evidence
-- generate a structured System One decision
-- batch-triage multiple text items
-- see runtime and RAG health
-- see configured inference instances
-- expand technical route/model/token details only when needed
+1. retrieve relevant evidence from the selected collection
+2. generate a grounded RAG answer
+3. submit the question, answer, and evidence to System One
+4. return typed decision outputs
+5. refresh runtime telemetry
+
+The interface exposes progress while the request runs, rather than requiring users to work with API commands.
+
+## Product surfaces
+
+- Engineering / Business collection selection
+- collection indexing
+- plain-English question input
+- live Retrieve → Answer → Decide → Record progress
+- grounded answer
+- retrieved evidence
+- structured choice / probability / score outputs
+- configured inference instances
+- recent browser activity
+- recent question history
+- live runtime metrics
+- benchmark count
+- high-level system architecture
+- technical route/model/token details on demand
 
 ## Run
 
-Start the repository services first:
+Start the repository services:
 
 ```bash
 docker compose up -d --build
@@ -37,18 +52,9 @@ Open:
 http://localhost:8080
 ```
 
-The UI server is a small same-origin proxy:
+The UI server is a same-origin proxy:
 
-- `/health` and `/v2/*` go to the System One runtime on port 8002
-- `/rag/*` goes to the RAG service on port 8001 after removing the `/rag` prefix
-
-Override endpoints when needed:
-
-```bash
-python3 serve_demo.py \
-  --port 8080 \
-  --runtime http://localhost:8002 \
-  --rag http://localhost:8001
-```
+- `/health` and `/v2/*` → System One Decision Runtime on port 8002
+- `/rag/*` → RAG service on port 8001
 
 No front-end build step or external JavaScript dependency is required.

@@ -6,351 +6,208 @@
 <title>System One</title>
 <style>
 :root{
-  --bg:#f6f8fb;--surface:#ffffff;--surface-2:#f9fafc;--ink:#121826;--muted:#657085;
-  --line:#e4e8ef;--line-strong:#d7dce6;--blue:#1769ff;--blue-soft:#edf4ff;
-  --green:#16a05d;--green-soft:#ecfbf3;--amber:#b96a08;--amber-soft:#fff7e7;
-  --red:#c73a3a;--red-soft:#fff0f0;--violet:#7c3aed;--violet-soft:#f5f0ff;
-  --shadow:0 10px 30px rgba(20,28,45,.055);--radius:18px;
+  --bg:#f7f8fb;--surface:#fff;--surface2:#fafbfc;--ink:#111827;--muted:#667085;--line:#e6e8ee;
+  --blue:#1769ff;--blue2:#edf4ff;--green:#128a53;--green2:#ecf9f2;--amber:#a96005;--red:#bc3b3b;
+  --violet:#6d4aff;--shadow:0 14px 40px rgba(16,24,40,.06);--r:18px;
 }
-*{box-sizing:border-box}
-html{background:var(--bg)}
-body{margin:0;color:var(--ink);background:var(--bg);font-family:Inter,-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;-webkit-font-smoothing:antialiased}
-button,input,textarea,select{font:inherit}
-button{cursor:pointer}
-.shell{min-height:100vh;display:grid;grid-template-columns:236px minmax(0,1fr)}
-.sidebar{background:var(--surface);border-right:1px solid var(--line);padding:24px 18px;position:sticky;top:0;height:100vh;display:flex;flex-direction:column}
-.brand{display:flex;gap:12px;align-items:center;padding:0 8px 26px}
-.logo{width:38px;height:38px;border-radius:12px;background:linear-gradient(145deg,#0e5eff,#448aff);display:grid;place-items:center;color:white;font-weight:800;box-shadow:0 8px 18px rgba(23,105,255,.2)}
-.brand b{display:block;font-size:16px;letter-spacing:-.01em}.brand span{font-size:11px;color:var(--muted)}
-.nav{display:grid;gap:6px}
-.nav button{border:0;background:transparent;color:#526077;text-align:left;padding:11px 12px;border-radius:11px;display:flex;gap:11px;align-items:center}
-.nav button.active{background:var(--blue-soft);color:#1456d9;font-weight:700}
-.nav .icon{width:18px;text-align:center}
-.side-status{margin-top:auto;border:1px solid var(--line);border-radius:14px;padding:13px;background:var(--surface-2)}
-.status-line{display:flex;align-items:center;gap:8px;font-size:13px;font-weight:700}
-.dot{width:9px;height:9px;border-radius:50%;background:#b5bcc8}
-.dot.ok{background:var(--green);box-shadow:0 0 0 4px rgba(22,160,93,.09)}
-.dot.bad{background:var(--red);box-shadow:0 0 0 4px rgba(199,58,58,.08)}
-.side-status small{display:block;color:var(--muted);margin:7px 0 0 17px}
-.workspace{min-width:0}
-.topbar{height:76px;background:rgba(255,255,255,.94);border-bottom:1px solid var(--line);display:flex;align-items:center;justify-content:space-between;padding:0 34px;position:sticky;top:0;z-index:20;backdrop-filter:blur(16px)}
-.top-title b{display:block;font-size:14px}.top-title span{font-size:12px;color:var(--muted)}
-.top-actions{display:flex;gap:10px;align-items:center}
-.chip{border:1px solid var(--line);background:var(--surface);padding:8px 11px;border-radius:999px;font-size:12px;color:#5f6b7f}
-main{max-width:1260px;margin:0 auto;padding:34px}
-.hero{display:flex;justify-content:space-between;gap:20px;align-items:flex-end;margin-bottom:22px}
-.hero h1{font-size:34px;letter-spacing:-.035em;margin:0 0 8px}
-.hero p{margin:0;color:var(--muted);font-size:15px}
-.health-cluster{display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end}
-.health{background:var(--surface);border:1px solid var(--line);border-radius:999px;padding:8px 11px;font-size:12px;display:flex;align-items:center;gap:7px;box-shadow:var(--shadow)}
-.panel{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow)}
-.composer{padding:22px}
-.composer-head{display:flex;justify-content:space-between;gap:18px;align-items:center;margin-bottom:14px}
-.tabs{display:flex;gap:8px;flex-wrap:wrap}
-.tab{border:1px solid var(--line);background:var(--surface);padding:9px 14px;border-radius:10px;color:#566278;font-weight:600}
-.tab.active{border-color:#9cbcff;background:var(--blue-soft);color:#1456d9}
-.secondary{border:1px solid var(--line);background:var(--surface);color:#475469;border-radius:10px;padding:9px 13px;font-weight:600}
-.secondary:hover{background:var(--surface-2)}
-.querybox{border:1px solid var(--line-strong);border-radius:14px;background:#fff;overflow:hidden;transition:.2s}
-.querybox:focus-within{border-color:#9cbcff;box-shadow:0 0 0 4px rgba(23,105,255,.06)}
-textarea{width:100%;border:0;outline:0;resize:vertical;min-height:124px;padding:18px;color:var(--ink);background:transparent;font-size:15px;line-height:1.55}
-.query-footer{display:flex;justify-content:space-between;gap:14px;align-items:center;padding:12px 14px;border-top:1px solid var(--line);background:var(--surface-2)}
-.examples{display:flex;gap:7px;flex-wrap:wrap}
-.example{font-size:11px;padding:6px 9px;border:1px solid var(--line);border-radius:999px;color:#68758a;background:#fff}
-.primary{border:0;background:var(--blue);color:#fff;border-radius:10px;padding:10px 16px;font-weight:750;box-shadow:0 7px 14px rgba(23,105,255,.17)}
-.primary:disabled,.secondary:disabled{opacity:.55;cursor:wait}
-.action-row{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin:14px 0 22px}
-.action{padding:15px 16px;border-radius:14px;border:1px solid var(--line);background:#fff;text-align:left;display:flex;align-items:center;gap:12px}
-.action:hover{border-color:#cfd6e2;box-shadow:var(--shadow)}
-.action-ico{width:40px;height:40px;border-radius:12px;display:grid;place-items:center;font-size:18px}
-.action b{display:block;font-size:14px;margin-bottom:2px}.action span{font-size:12px;color:var(--muted)}
-.action.ingest .action-ico{background:var(--green-soft);color:var(--green)}
-.action.query .action-ico{background:var(--blue-soft);color:var(--blue)}
-.action.decide .action-ico{background:var(--violet-soft);color:var(--violet)}
-.content-grid{display:grid;grid-template-columns:minmax(0,1.22fr) minmax(340px,.78fr);gap:16px}
-.card{padding:19px}
-.card-head{display:flex;justify-content:space-between;gap:12px;align-items:center;margin-bottom:14px}
-.card-head h2{font-size:16px;margin:0;letter-spacing:-.015em}.card-head span{font-size:12px;color:var(--muted)}
-.empty{padding:34px 18px;text-align:center;border:1px dashed var(--line-strong);border-radius:13px;color:var(--muted);font-size:13px;background:var(--surface-2)}
-.evidence{display:grid;gap:9px}
-.evidence-item{border:1px solid var(--line);border-radius:13px;padding:13px 14px;background:#fff}
-.evidence-top{display:flex;justify-content:space-between;gap:10px;align-items:center}
-.evidence-title{display:flex;gap:10px;align-items:center;font-weight:700;font-size:13px}
-.rank{width:26px;height:26px;border-radius:9px;background:var(--blue-soft);color:var(--blue);display:grid;place-items:center;font-size:11px;font-weight:800}
-.distance{font-size:11px;color:var(--muted)}
-.evidence-item p{margin:8px 0 0 36px;color:#667286;font-size:12px;line-height:1.55}
-.decision-list{display:grid;gap:10px}
-.decision{border:1px solid var(--line);border-radius:13px;padding:14px}
-.decision.choice{background:linear-gradient(135deg,#fbfffc,#f5fcf8)}
-.decision h3{margin:0 0 8px;font-size:13px;display:flex;justify-content:space-between;gap:10px}
-.decision h3 span{color:var(--muted);font-weight:500}
-.answer-main{font-size:18px;font-weight:800;letter-spacing:-.02em}
-.probs{display:grid;gap:7px;margin-top:11px}
-.prob{display:grid;grid-template-columns:110px 1fr 48px;gap:9px;align-items:center;font-size:11px;color:#647086}
-.track{height:7px;border-radius:20px;background:#eef1f5;overflow:hidden}
-.fill{height:100%;background:var(--blue);border-radius:20px}
-.metric{display:flex;align-items:baseline;gap:7px}.metric strong{font-size:25px}.metric span{font-size:11px;color:var(--muted)}
-.details{margin-top:16px;border-top:1px solid var(--line);padding-top:12px}
-details summary{cursor:pointer;font-size:12px;color:#68758a;font-weight:650}
-.tech{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin-top:10px}
-.tech div{padding:9px 10px;background:var(--surface-2);border-radius:10px;font-size:11px;color:var(--muted)}
-.tech b{display:block;color:var(--ink);margin-top:3px;font-size:12px}
-.provider-list{display:grid;gap:9px}
-.provider{border:1px solid var(--line);border-radius:12px;padding:11px 12px;display:flex;justify-content:space-between;gap:14px}
-.provider b{font-size:12px}.provider small{display:block;color:var(--muted);margin-top:3px}
-.badge{font-size:10px;border-radius:999px;padding:5px 7px;height:max-content;background:var(--green-soft);color:var(--green);font-weight:700}
-.batch{margin-top:16px}
-.batch textarea{border:1px solid var(--line);border-radius:12px;min-height:92px;background:#fff}
-.batch-table{width:100%;border-collapse:collapse;margin-top:12px;font-size:12px}
-.batch-table th,.batch-table td{padding:9px;border-bottom:1px solid var(--line);text-align:left;vertical-align:top}
-.batch-table th{color:var(--muted);font-size:10px;text-transform:uppercase;letter-spacing:.05em}
-.notice{padding:11px 12px;border-radius:11px;font-size:12px;margin-top:12px}
-.notice.ok{background:var(--green-soft);color:#146d44}.notice.err{background:var(--red-soft);color:#9e2f2f}.notice.info{background:var(--blue-soft);color:#275ba8}
-.loading{opacity:.62}
-.mobile-nav{display:none}
-@media(max-width:1000px){
- .shell{grid-template-columns:1fr}.sidebar{display:none}.topbar{padding:0 18px}main{padding:22px}
- .content-grid{grid-template-columns:1fr}.action-row{grid-template-columns:1fr}.hero{align-items:flex-start;flex-direction:column}
- .health-cluster{justify-content:flex-start}.mobile-nav{display:flex}
-}
-@media(max-width:640px){
- main{padding:16px}.topbar{height:auto;padding:14px 16px}.top-actions{display:none}.hero h1{font-size:28px}
- .query-footer{align-items:flex-start;flex-direction:column}.primary{width:100%}.composer{padding:15px}
- .tech{grid-template-columns:1fr}.prob{grid-template-columns:90px 1fr 42px}
-}
+*{box-sizing:border-box}html{background:var(--bg)}body{margin:0;background:var(--bg);color:var(--ink);font-family:Inter,-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;-webkit-font-smoothing:antialiased}
+button,input,textarea,select{font:inherit}button{cursor:pointer}.app{min-height:100vh;display:grid;grid-template-columns:228px 1fr}
+aside{height:100vh;position:sticky;top:0;background:#fff;border-right:1px solid var(--line);padding:22px 16px;display:flex;flex-direction:column}
+.brand{display:flex;align-items:center;gap:11px;padding:2px 8px 24px}.mark{width:38px;height:38px;border-radius:12px;background:linear-gradient(145deg,#0d5bff,#4b8dff);color:white;display:grid;place-items:center;font-weight:850;box-shadow:0 8px 20px rgba(23,105,255,.22)}
+.brand strong{font-size:15px;display:block}.brand small{font-size:10px;color:var(--muted)}
+nav{display:grid;gap:6px}.nav{border:0;background:transparent;color:#59667a;text-align:left;padding:11px 12px;border-radius:11px;display:flex;gap:10px;align-items:center}.nav.active{background:var(--blue2);color:#1456d9;font-weight:750}
+.nav span:first-child{width:18px;text-align:center}.system-mini{margin-top:auto;border:1px solid var(--line);border-radius:14px;padding:12px;background:var(--surface2)}
+.status{display:flex;gap:8px;align-items:center;font-size:12px;font-weight:750}.dot{width:8px;height:8px;border-radius:50%;background:#b6bdc8}.dot.ok{background:var(--green);box-shadow:0 0 0 4px rgba(18,138,83,.08)}.dot.bad{background:var(--red)}
+.system-mini small{display:block;margin:6px 0 0 16px;color:var(--muted)}
+.workspace{min-width:0}.topbar{height:72px;background:rgba(255,255,255,.94);backdrop-filter:blur(14px);border-bottom:1px solid var(--line);display:flex;justify-content:space-between;align-items:center;padding:0 30px;position:sticky;top:0;z-index:30}
+.topbar b{font-size:13px}.topbar small{display:block;color:var(--muted);margin-top:2px}.top-right{display:flex;gap:8px;align-items:center}.pill{border:1px solid var(--line);background:#fff;border-radius:999px;padding:7px 10px;font-size:11px;color:#5e6b7e}
+main{max-width:1280px;margin:0 auto;padding:30px}.hero{display:flex;justify-content:space-between;align-items:end;gap:20px;margin-bottom:18px}.hero h1{margin:0 0 7px;font-size:33px;letter-spacing:-.035em}.hero p{margin:0;color:var(--muted);font-size:14px}
+.panel{background:#fff;border:1px solid var(--line);border-radius:var(--r);box-shadow:var(--shadow)}.ask{padding:20px}.row{display:flex;gap:10px;align-items:center;justify-content:space-between;flex-wrap:wrap}
+.seg{display:flex;gap:7px}.seg button{border:1px solid var(--line);background:#fff;color:#5d697c;border-radius:10px;padding:8px 12px;font-weight:650}.seg button.active{background:var(--blue2);border-color:#a8c3ff;color:#1456d9}
+.askbox{margin-top:13px;border:1px solid #d9dee7;border-radius:15px;overflow:hidden;transition:.2s}.askbox:focus-within{border-color:#9dbdff;box-shadow:0 0 0 4px rgba(23,105,255,.06)}
+textarea{width:100%;border:0;outline:0;resize:vertical;background:transparent;min-height:120px;padding:17px 18px;font-size:15px;line-height:1.55;color:var(--ink)}
+.askfoot{border-top:1px solid var(--line);background:var(--surface2);padding:11px 12px;display:flex;justify-content:space-between;gap:12px;align-items:center}.examples{display:flex;gap:6px;flex-wrap:wrap}.ex{border:1px solid var(--line);background:#fff;color:#68758a;border-radius:999px;padding:6px 9px;font-size:10px}
+.primary{border:0;background:var(--blue);color:#fff;border-radius:10px;padding:10px 16px;font-weight:800;box-shadow:0 8px 18px rgba(23,105,255,.17)}.primary:disabled{opacity:.55;cursor:wait}.secondary{border:1px solid var(--line);background:#fff;border-radius:10px;padding:9px 12px;color:#4e5b6f;font-weight:650}
+.flow{margin-top:12px;border-top:1px solid var(--line);padding-top:12px;display:none}.flow.show{display:block}.steps{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}.step{border:1px solid var(--line);border-radius:11px;padding:10px;background:#fff}.step b{font-size:11px;display:block}.step span{font-size:10px;color:var(--muted)}.step.active{border-color:#a7c0ff;background:var(--blue2)}.step.done{border-color:#bce5cf;background:var(--green2)}.step.error{border-color:#efc7c7;background:#fff4f4}
+.grid{display:grid;grid-template-columns:minmax(0,1.25fr) minmax(350px,.75fr);gap:16px;margin-top:16px}.card{padding:18px}.head{display:flex;justify-content:space-between;gap:12px;align-items:center;margin-bottom:13px}.head h2{font-size:15px;margin:0}.head span{font-size:11px;color:var(--muted)}
+.empty{padding:30px 16px;border:1px dashed #d8dde6;background:var(--surface2);border-radius:13px;text-align:center;color:var(--muted);font-size:12px}
+.answer{border:1px solid var(--line);border-radius:14px;padding:15px;background:linear-gradient(180deg,#fff,#fbfcff);margin-bottom:12px}.answer-label{font-size:10px;text-transform:uppercase;letter-spacing:.08em;color:#768399;font-weight:800}.answer p{font-size:13px;line-height:1.62;color:#49566a;margin:8px 0 0}
+.evidence{display:grid;gap:8px}.evidence-item{border:1px solid var(--line);border-radius:12px;padding:12px;background:#fff}.evtop{display:flex;justify-content:space-between;gap:10px}.rank{width:24px;height:24px;border-radius:8px;background:var(--blue2);color:var(--blue);display:grid;place-items:center;font-size:10px;font-weight:800}.evtitle{display:flex;gap:8px;align-items:center;font-weight:700;font-size:12px}.evidence-item p{margin:7px 0 0 32px;font-size:11px;line-height:1.5;color:#68758a}.dist{font-size:10px;color:#8a94a4}
+.decisions{display:grid;gap:9px}.decision{border:1px solid var(--line);border-radius:13px;padding:13px}.decision h3{margin:0 0 7px;font-size:12px;display:flex;justify-content:space-between}.decision h3 span{color:var(--muted);font-weight:500}.big{font-size:20px;font-weight:850;letter-spacing:-.02em}.metric{display:flex;gap:7px;align-items:baseline}.metric strong{font-size:24px}.metric span{font-size:10px;color:var(--muted)}.bars{display:grid;gap:6px;margin-top:10px}.bar{display:grid;grid-template-columns:100px 1fr 42px;gap:7px;align-items:center;font-size:10px;color:#68758a}.track{height:6px;border-radius:10px;background:#edf0f4;overflow:hidden}.fill{height:100%;background:var(--blue);border-radius:10px}
+details{margin-top:12px;border-top:1px solid var(--line);padding-top:10px}summary{font-size:11px;color:#6d788a;font-weight:650}.tech{display:grid;grid-template-columns:repeat(2,1fr);gap:7px;margin-top:9px}.tech div{padding:8px 9px;border-radius:9px;background:var(--surface2);font-size:10px;color:var(--muted)}.tech b{display:block;color:var(--ink);font-size:11px;margin-top:2px}
+.lower{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:16px}.provider{border:1px solid var(--line);border-radius:11px;padding:11px;display:flex;justify-content:space-between;gap:12px;margin-bottom:8px}.provider b{font-size:11px}.provider small{display:block;color:var(--muted);margin-top:3px}.badge{font-size:9px;border-radius:999px;padding:4px 7px;background:var(--green2);color:var(--green);font-weight:800;height:max-content}
+.activity{display:grid;gap:8px}.event{display:grid;grid-template-columns:8px 1fr auto;gap:8px;align-items:start}.event .edot{width:7px;height:7px;border-radius:50%;background:#c8ced8;margin-top:4px}.event.ok .edot{background:var(--green)}.event.info .edot{background:var(--blue)}.event.bad .edot{background:var(--red)}.event b{font-size:11px}.event p{margin:2px 0 0;color:var(--muted);font-size:10px}.event time{font-size:9px;color:#99a2b0}
+.system-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:9px}.stat{border:1px solid var(--line);border-radius:11px;padding:11px}.stat small{color:var(--muted);font-size:9px;text-transform:uppercase;letter-spacing:.06em}.stat strong{display:block;margin-top:4px;font-size:18px}
+.history{display:grid;gap:7px}.hist{border:1px solid var(--line);background:#fff;border-radius:11px;padding:10px;text-align:left;width:100%}.hist b{display:block;font-size:11px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.hist span{font-size:9px;color:var(--muted)}
+.toast{margin-top:10px;padding:10px 11px;border-radius:10px;font-size:11px}.toast.ok{background:var(--green2);color:#146a42}.toast.bad{background:#fff1f1;color:#9d3232}.toast.info{background:var(--blue2);color:#275aa8}
+.drawer{position:fixed;top:0;right:-440px;width:min(440px,100vw);height:100vh;background:#fff;border-left:1px solid var(--line);z-index:50;box-shadow:-18px 0 50px rgba(16,24,40,.08);padding:22px;transition:.25s;overflow:auto}.drawer.open{right:0}.drawer-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:20px}.close{border:1px solid var(--line);background:#fff;border-radius:9px;padding:7px 9px}.arch{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:10px;line-height:1.6;background:var(--surface2);border:1px solid var(--line);border-radius:12px;padding:12px;white-space:pre-wrap}
+@media(max-width:1000px){.app{grid-template-columns:1fr}aside{display:none}.topbar{padding:0 18px}main{padding:20px}.grid,.lower{grid-template-columns:1fr}.hero{align-items:flex-start;flex-direction:column}.steps{grid-template-columns:1fr 1fr}}
+@media(max-width:620px){main{padding:14px}.top-right{display:none}.hero h1{font-size:27px}.ask{padding:14px}.askfoot{align-items:flex-start;flex-direction:column}.primary{width:100%}.steps{grid-template-columns:1fr}.system-grid{grid-template-columns:1fr}.tech{grid-template-columns:1fr}}
 </style>
 </head>
 <body>
-<div class="shell">
-  <aside class="sidebar">
-    <div class="brand"><div class="logo">1</div><div><b>System One</b><span>Decision Runtime + RAG</span></div></div>
-    <div class="nav">
-      <button class="active"><span class="icon">⌂</span>Workspace</button>
-      <button onclick="document.getElementById('evidenceCard').scrollIntoView({behavior:'smooth'})"><span class="icon">⌕</span>Evidence</button>
-      <button onclick="document.getElementById('decisionCard').scrollIntoView({behavior:'smooth'})"><span class="icon">◇</span>Decisions</button>
-      <button onclick="document.getElementById('providersCard').scrollIntoView({behavior:'smooth'})"><span class="icon">◉</span>Providers</button>
-      <button onclick="document.getElementById('batchCard').scrollIntoView({behavior:'smooth'})"><span class="icon">≡</span>Batch triage</button>
+<div class="app">
+<aside>
+  <div class="brand"><div class="mark">1</div><div><strong>System One</strong><small>Decision Runtime</small></div></div>
+  <nav>
+    <button class="nav active"><span>⌂</span>Workspace</button>
+    <button class="nav" onclick="scrollToId('evidenceCard')"><span>⌕</span>Evidence</button>
+    <button class="nav" onclick="scrollToId('decisionCard')"><span>◇</span>Decisions</button>
+    <button class="nav" onclick="scrollToId('providersCard')"><span>◉</span>Providers</button>
+    <button class="nav" onclick="openSystem()"><span>◎</span>System</button>
+  </nav>
+  <div class="system-mini"><div class="status"><span id="overallDot" class="dot"></span><span>System status</span></div><small id="overallText">Checking…</small></div>
+</aside>
+
+<div class="workspace">
+<header class="topbar">
+  <div><b>System One Workspace</b><small>Ask, retrieve, analyze, decide</small></div>
+  <div class="top-right"><span class="pill" id="runtimeChip">Runtime · checking</span><span class="pill" id="ragChip">RAG · checking</span><button class="secondary" onclick="openSystem()">System</button></div>
+</header>
+
+<main>
+  <div class="hero"><div><h1>Ask System One</h1><p>Use indexed knowledge and live inference to move from a question to evidence and a structured decision.</p></div></div>
+
+  <section class="panel ask">
+    <div class="row">
+      <div class="seg"><button class="active" data-col="engineering" onclick="setCollection('engineering')">Engineering</button><button data-col="business" onclick="setCollection('business')">Business</button></div>
+      <div><button class="secondary" onclick="indexCollection()">Index collection</button></div>
     </div>
-    <div class="side-status">
-      <div class="status-line"><span id="systemDot" class="dot"></span><span>System health</span></div>
-      <small id="systemText">Checking services…</small>
+    <div class="askbox">
+      <textarea id="question">My payment-service pod is in CrashLoopBackOff with exit code 137. What should I check first?</textarea>
+      <div class="askfoot">
+        <div class="examples">
+          <button class="ex" onclick="example('My payment-service pod is in CrashLoopBackOff with exit code 137. What should I check first?')">CrashLoopBackOff</button>
+          <button class="ex" onclick="example('What is the approval threshold for a $12,000 invoice from a new vendor?')">Invoice approval</button>
+          <button class="ex" onclick="example('Which evidence is most relevant and what should I do next?')">Evidence + action</button>
+        </div>
+        <button class="primary" id="askBtn" onclick="askSystemOne()">Ask System One</button>
+      </div>
     </div>
-  </aside>
+    <div class="flow" id="flow"><div class="steps">
+      <div class="step" id="s1"><b>1. Retrieve</b><span>Find relevant evidence</span></div>
+      <div class="step" id="s2"><b>2. Answer</b><span>Generate grounded context</span></div>
+      <div class="step" id="s3"><b>3. Decide</b><span>Produce typed probabilities</span></div>
+      <div class="step" id="s4"><b>4. Record</b><span>Capture runtime telemetry</span></div>
+    </div></div>
+    <div id="notice"></div>
+  </section>
 
-  <div class="workspace">
-    <header class="topbar">
-      <div class="top-title"><b>System One</b><span>Ask, retrieve, and decide from one workspace</span></div>
-      <div class="top-actions">
-        <span class="chip" id="ragChip">RAG · checking</span>
-        <span class="chip" id="runtimeChip">Runtime · checking</span>
-      </div>
-    </header>
+  <div class="grid">
+    <section class="panel card" id="evidenceCard">
+      <div class="head"><div><h2>Knowledge response</h2><span id="evidenceMeta">Ready for a question</span></div></div>
+      <div id="answerBlock" class="empty">Ask System One to see a grounded answer and the evidence behind it.</div>
+      <div id="evidence"></div>
+    </section>
 
-    <main>
-      <div class="hero">
-        <div>
-          <h1>What do you need to know?</h1>
-          <p>Search your indexed knowledge, review the evidence, and turn it into a structured decision.</p>
-        </div>
-        <div class="health-cluster" id="healthCluster"></div>
-      </div>
-
-      <section class="panel composer">
-        <div class="composer-head">
-          <div class="tabs">
-            <button class="tab active" data-collection="engineering" onclick="selectCollection('engineering')">Engineering</button>
-            <button class="tab" data-collection="business" onclick="selectCollection('business')">Business</button>
-          </div>
-          <button class="secondary" id="ingestBtn" onclick="ingestCurrent()">Index this collection</button>
-        </div>
-        <div class="querybox">
-          <textarea id="question" placeholder="Ask a question about your indexed knowledge…">My payment-service pod is in CrashLoopBackOff with exit code 137. What should I check first?</textarea>
-          <div class="query-footer">
-            <div class="examples">
-              <button class="example" onclick="useExample('My payment-service pod is in CrashLoopBackOff with exit code 137. What should I check first?')">CrashLoopBackOff</button>
-              <button class="example" onclick="useExample('What is the approval threshold for a $12,000 invoice from a new vendor?')">Invoice approval</button>
-              <button class="example" onclick="useExample('Which evidence is most relevant to this incident?')">Relevant evidence</button>
-            </div>
-            <button class="primary" id="queryBtn" onclick="runQuery()">Search knowledge</button>
-          </div>
-        </div>
-        <div id="notice"></div>
-      </section>
-
-      <div class="action-row">
-        <button class="action ingest" onclick="ingestCurrent()"><div class="action-ico">▤</div><div><b>Index knowledge</b><span>Prepare the selected collection for search</span></div></button>
-        <button class="action query" onclick="runQuery()"><div class="action-ico">⌕</div><div><b>Search & retrieve</b><span>Find the evidence behind your question</span></div></button>
-        <button class="action decide" onclick="makeDecision()"><div class="action-ico">◇</div><div><b>Make a decision</b><span>Turn the current question into typed probabilities</span></div></button>
-      </div>
-
-      <div class="content-grid">
-        <section class="panel card" id="evidenceCard">
-          <div class="card-head"><div><h2>Retrieved evidence</h2><span id="evidenceMeta">Nothing retrieved yet</span></div></div>
-          <div id="evidence" class="empty">Search a collection to see the evidence System One found.</div>
-        </section>
-
-        <section class="panel card" id="decisionCard">
-          <div class="card-head"><div><h2>Decision output</h2><span id="decisionMeta">No decision yet</span></div></div>
-          <div id="decision" class="empty">Run a decision to see choice, probability, and score results.</div>
-        </section>
-      </div>
-
-      <div class="content-grid" style="margin-top:16px">
-        <section class="panel card" id="providersCard">
-          <div class="card-head"><div><h2>Inference instances</h2><span>Configured behind System One</span></div></div>
-          <div id="providers" class="provider-list"><div class="empty">Checking configured instances…</div></div>
-        </section>
-
-        <section class="panel card" id="batchCard">
-          <div class="card-head"><div><h2>Batch triage</h2><span>One item per line</span></div></div>
-          <div class="batch">
-            <textarea id="batchInput" placeholder="Paste support tickets, alerts, emails, or notes — one per line"></textarea>
-            <button class="secondary" id="batchBtn" style="margin-top:9px" onclick="runBatch()">Triage items</button>
-            <div id="batchResult"></div>
-          </div>
-        </section>
-      </div>
-    </main>
+    <section class="panel card" id="decisionCard">
+      <div class="head"><div><h2>Decision</h2><span id="decisionMeta">No decision yet</span></div></div>
+      <div id="decision" class="empty">The structured decision will appear here after the evidence is analyzed.</div>
+    </section>
   </div>
+
+  <div class="lower">
+    <section class="panel card" id="providersCard">
+      <div class="head"><div><h2>Inference</h2><span>Resources configured behind System One</span></div></div>
+      <div id="providers"><div class="empty">Loading inference instances…</div></div>
+    </section>
+
+    <section class="panel card">
+      <div class="head"><div><h2>Recent activity</h2><span>Browser session</span></div><button class="secondary" onclick="clearHistory()">Clear</button></div>
+      <div id="activity" class="activity"><div class="empty">Your recent questions and system activity will appear here.</div></div>
+    </section>
+  </div>
+</main>
+</div>
+</div>
+
+<div class="drawer" id="drawer">
+  <div class="drawer-head"><div><b>System overview</b><small style="display:block;color:var(--muted);margin-top:3px">Live operational view</small></div><button class="close" onclick="closeSystem()">Close</button></div>
+  <div class="system-grid">
+    <div class="stat"><small>Requests</small><strong id="mCount">—</strong></div>
+    <div class="stat"><small>p95 latency</small><strong id="mLatency">—</strong></div>
+    <div class="stat"><small>Benchmarks</small><strong id="mBench">—</strong></div>
+  </div>
+  <div style="height:16px"></div>
+  <div class="head"><div><h2>Architecture</h2><span>High-level flow</span></div></div>
+  <div class="arch">Browser UI
+   │
+   ├── RAG service :8001
+   │      ├── embeddings
+   │      ├── Chroma :8000
+   │      └── generated answer
+   │
+   └── System One :8002
+          ├── provider registry
+          ├── capability + health filters
+          ├── calibration
+          ├── empirical benchmarks
+          ├── telemetry
+          └── inference targets
+                ├── local Ollama :11434
+                └── hosted / cluster endpoints</div>
+  <div style="height:16px"></div>
+  <div class="head"><div><h2>Recent questions</h2><span>Saved in this browser</span></div></div>
+  <div id="history" class="history"></div>
 </div>
 
 <script>
-let collection = "engineering";
-let lastQuestion = "";
-let lastEvidence = [];
-let lastQueryAnswer = null;
-
-const DECISION_QUESTIONS = {
-  route: {
-    type:"choice",
-    instructions:"What is the best next step based on the available state and evidence?",
-    criteria:{
-      investigate:"Investigate the evidence further",
-      act:"Take the recommended operational action",
-      observe:"Continue observing before acting"
-    }
-  },
-  actionable:{type:"null", instructions:"Is this actionable now?"},
-  confidence:{type:"score", instructions:"How strongly does the available evidence support a clear next step?", min:1, max:5}
+let collection="engineering", lastEvidence=[], lastAnswer=null;
+const questions={
+ route:{type:"choice",instructions:"What is the best next step based on the question, answer, and evidence?",criteria:{investigate:"Investigate further",act:"Take the recommended action",observe:"Continue observing"}},
+ actionable:{type:"null",instructions:"Is this actionable now?"},
+ confidence:{type:"score",instructions:"How strongly does the evidence support a clear next step?",min:1,max:5}
 };
+const escapeHtml=v=>String(v??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#039;"}[c]));
+async function api(path,opts={}){const r=await fetch(path,opts);const t=await r.text();let b;try{b=JSON.parse(t)}catch{b={raw:t}}return{ok:r.ok,status:r.status,body:b}}
+function scrollToId(id){document.getElementById(id).scrollIntoView({behavior:"smooth"})}
+function setCollection(v){collection=v;document.querySelectorAll("[data-col]").forEach(x=>x.classList.toggle("active",x.dataset.col===v));if(v==="business"&&document.getElementById("question").value.includes("CrashLoopBackOff"))example("What is the approval threshold for a $12,000 invoice from a new vendor?")}
+function example(q){document.getElementById("question").value=q}
+function toast(msg,type="info"){document.getElementById("notice").innerHTML=msg?'<div class="toast '+type+'">'+escapeHtml(msg)+'</div>':""}
+function step(n,state){const el=document.getElementById("s"+n);el.className="step "+state}
+function flowStart(){document.getElementById("flow").classList.add("show");[1,2,3,4].forEach(i=>step(i,""))}
+function event(title,detail,type="info"){const rows=JSON.parse(localStorage.getItem("so_activity")||"[]");rows.unshift({title,detail,type,ts:new Date().toISOString()});localStorage.setItem("so_activity",JSON.stringify(rows.slice(0,12)));renderActivity()}
+function renderActivity(){const rows=JSON.parse(localStorage.getItem("so_activity")||"[]");const el=document.getElementById("activity");if(!rows.length){el.innerHTML='<div class="empty">Your recent questions and system activity will appear here.</div>';return}el.innerHTML=rows.map(x=>'<div class="event '+escapeHtml(x.type)+'"><span class="edot"></span><div><b>'+escapeHtml(x.title)+'</b><p>'+escapeHtml(x.detail)+'</p></div><time>'+new Date(x.ts).toLocaleTimeString([], {hour:"2-digit",minute:"2-digit"})+'</time></div>').join("")}
+function saveQuestion(q){const rows=JSON.parse(localStorage.getItem("so_history")||"[]").filter(x=>x.q!==q);rows.unshift({q,collection,ts:new Date().toISOString()});localStorage.setItem("so_history",JSON.stringify(rows.slice(0,10)));renderHistory()}
+function renderHistory(){const rows=JSON.parse(localStorage.getItem("so_history")||"[]");document.getElementById("history").innerHTML=rows.length?rows.map(x=>'<button class="hist" onclick="reuse('+JSON.stringify(x.q).replace(/"/g,"&quot;")+')"><b>'+escapeHtml(x.q)+'</b><span>'+escapeHtml(x.collection)+' · '+new Date(x.ts).toLocaleString()+'</span></button>').join(""):'<div class="empty">No recent questions yet.</div>'}
+function reuse(q){document.getElementById("question").value=q;closeSystem()}
+function clearHistory(){localStorage.removeItem("so_activity");localStorage.removeItem("so_history");renderActivity();renderHistory()}
+async function indexCollection(){toast("Indexing "+collection+"…","info");event("Index started",collection,"info");const r=await api("/rag/v1/ingest",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({collection})});if(r.ok){toast("Indexed "+collection+" · "+(r.body.chunks??0)+" chunks","ok");event("Index ready",collection+" · "+(r.body.chunks??0)+" chunks","ok")}else{toast("Index failed: "+(r.body.detail||r.status),"bad");event("Index failed",r.body.detail||("HTTP "+r.status),"bad")}}
+function renderEvidence(chunks){const el=document.getElementById("evidence");if(!chunks.length){el.innerHTML='<div class="empty">No matching evidence was returned.</div>';return}el.className="evidence";el.innerHTML=chunks.map((x,i)=>'<div class="evidence-item"><div class="evtop"><div class="evtitle"><span class="rank">'+(i+1)+'</span><span>Evidence '+(i+1)+'</span></div><span class="dist">'+(x.distance!=null?Number(x.distance).toFixed(3):"retrieved")+'</span></div><p>'+escapeHtml((x.text||"").slice(0,520))+'</p></div>').join("")}
+function renderAnswer(body){const answer=body?.answer||"No generated answer returned.";document.getElementById("answerBlock").className="answer";document.getElementById("answerBlock").innerHTML='<div class="answer-label">Grounded answer</div><p>'+escapeHtml(answer)+'</p>'}
+function bars(probs){return'<div class="bars">'+Object.entries(probs||{}).sort((a,b)=>b[1]-a[1]).map(([k,v])=>'<div class="bar"><span>'+escapeHtml(k)+'</span><div class="track"><div class="fill" style="width:'+Math.max(0,Math.min(100,v*100))+'%"></div></div><b>'+Math.round(v*100)+'%</b></div>').join("")+'</div>'}
+function renderDecision(body){const a=body.answers||{},r=a.route||{},act=a.actionable||{},conf=a.confidence||{},rt=body.route||{},u=body.usage||{};document.getElementById("decision").className="";document.getElementById("decision").innerHTML='<div class="decisions"><div class="decision"><h3>Recommended path <span>choice</span></h3><div class="big">'+escapeHtml(r.value??"—")+'</div>'+bars(r.probabilities)+'</div><div class="decision"><h3>Actionable now <span>probability</span></h3><div class="metric"><strong>'+(!Number.isNaN(Number(act.value))?Math.round(Number(act.value)*100)+"%":"—")+'</strong><span>probability true</span></div></div><div class="decision"><h3>Evidence strength <span>score</span></h3><div class="metric"><strong>'+escapeHtml(conf.value??"—")+'</strong><span>configured scale</span></div></div></div><details><summary>Technical details</summary><div class="tech"><div>Instance<b>'+escapeHtml(rt.provider??"—")+'</b></div><div>Model<b>'+escapeHtml(rt.model??"—")+'</b></div><div>Latency<b>'+escapeHtml(body.latency_ms??"—")+' ms</b></div><div>Tokens<b>'+escapeHtml(u.total_tokens??"—")+'</b></div></div></details>';document.getElementById("decisionMeta").textContent="Decision ready"}
+async function askSystemOne(){
+ const q=document.getElementById("question").value.trim();if(!q){toast("Enter a question first.","bad");return}
+ const btn=document.getElementById("askBtn");btn.disabled=true;btn.textContent="Working…";toast("");flowStart();saveQuestion(q);event("Question received",q,"info");
+ try{
+  step(1,"active");
+  const retrieval=await api("/rag/v1/retrieve",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({collection,question:q,top_k:6})});
+  if(!retrieval.ok)throw new Error(retrieval.body.detail||("Retrieve HTTP "+retrieval.status));
+  lastEvidence=retrieval.body.chunks||[];renderEvidence(lastEvidence);document.getElementById("evidenceMeta").textContent=lastEvidence.length+" sources";step(1,"done");event("Evidence retrieved",lastEvidence.length+" sources","ok");
 
-function escapeHtml(value){
-  return String(value ?? "").replace(/[&<>"']/g, c=>({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#039;"}[c]));
+  step(2,"active");
+  const answer=await api("/rag/v1/query",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({collection,question:q,top_k:6})});
+  if(!answer.ok)throw new Error(answer.body.detail||("Query HTTP "+answer.status));
+  lastAnswer=answer.body;renderAnswer(answer.body);step(2,"done");event("Grounded answer ready",collection,"ok");
+
+  step(3,"active");
+  const state={question:q,collection,evidence:lastEvidence.map(x=>x.text||""),rag_answer:lastAnswer?.answer||null};
+  const dec=await api("/v2/decide",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({state,questions})});
+  if(!dec.ok)throw new Error(dec.body.detail||("Decision HTTP "+dec.status));
+  renderDecision(dec.body);step(3,"done");event("Decision ready",(dec.body.route||{}).provider||"System One","ok");
+
+  step(4,"active");await refreshSystem();step(4,"done");event("Execution recorded","Telemetry refreshed","ok");toast("System One completed the full evidence-to-decision flow.","ok");
+ }catch(e){[1,2,3,4].forEach(i=>{if(document.getElementById("s"+i).classList.contains("active"))step(i,"error")});toast(e.message,"bad");event("Request failed",e.message,"bad")}
+ finally{btn.disabled=false;btn.textContent="Ask System One"}
 }
-async function api(path, opts={}){
-  const r=await fetch(path,opts);
-  const text=await r.text();
-  let body; try{body=JSON.parse(text)}catch{body={raw:text}}
-  return {ok:r.ok,status:r.status,body};
+async function refreshSystem(){
+ const [runtime,rag,providers,metrics,bench]=await Promise.all([api("/health"),api("/rag/v1/health"),api("/v2/providers"),api("/v2/metrics?limit=1000"),api("/v2/benchmarks")]);
+ const ok=runtime.ok&&rag.ok;document.getElementById("overallDot").className="dot "+(ok?"ok":"bad");document.getElementById("overallText").textContent=ok?"All core services available":"Service attention required";document.getElementById("runtimeChip").textContent="Runtime · "+(runtime.ok?"healthy":"unavailable");document.getElementById("ragChip").textContent="RAG · "+(rag.ok?"healthy":"unavailable");
+ const p=document.getElementById("providers");if(providers.ok){const rows=providers.body.providers||[];p.innerHTML=rows.length?rows.map(x=>'<div class="provider"><div><b>'+escapeHtml(x.id)+'</b><small>'+escapeHtml(x.model||"")+' · '+escapeHtml(x.driver||"")+'</small></div><span class="badge">'+(x.attributes?.local?"local":"configured")+'</span></div>').join(""):'<div class="empty">No inference instances configured.</div>'}
+ document.getElementById("mCount").textContent=metrics.ok?(metrics.body.count??0):"—";document.getElementById("mLatency").textContent=metrics.ok&&metrics.body.p95_latency_ms!=null?Math.round(metrics.body.p95_latency_ms)+"ms":"—";document.getElementById("mBench").textContent=bench.ok?((bench.body.benchmarks||[]).length):"—";
 }
-function notice(message,type="info"){
-  document.getElementById("notice").innerHTML=message?'<div class="notice '+type+'">'+escapeHtml(message)+'</div>':"";
-}
-function selectCollection(name){
-  collection=name;
-  document.querySelectorAll(".tab").forEach(b=>b.classList.toggle("active",b.dataset.collection===name));
-  if(name==="business" && document.getElementById("question").value.includes("CrashLoopBackOff")){
-    useExample("What is the approval threshold for a $12,000 invoice from a new vendor?");
-  }
-}
-function useExample(q){document.getElementById("question").value=q}
-async function ingestCurrent(){
-  const btn=document.getElementById("ingestBtn");btn.disabled=true;btn.textContent="Indexing…";notice("");
-  try{
-    const res=await api("/rag/v1/ingest",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({collection})});
-    if(!res.ok) throw new Error(res.body.detail||("HTTP "+res.status));
-    notice("Indexed "+collection+" successfully · "+(res.body.chunks??0)+" chunks","ok");
-  }catch(e){notice("Could not index "+collection+": "+e.message,"err")}
-  finally{btn.disabled=false;btn.textContent="Index this collection"}
-}
-function renderEvidence(chunks){
-  const el=document.getElementById("evidence");
-  document.getElementById("evidenceMeta").textContent=chunks.length?chunks.length+" relevant sources":"No matching sources";
-  if(!chunks.length){el.className="empty";el.textContent="No relevant evidence was returned.";return}
-  el.className="evidence";
-  el.innerHTML=chunks.map((x,i)=>{
-    const d=x.distance!=null?("distance "+Number(x.distance).toFixed(3)):"retrieved";
-    return '<article class="evidence-item"><div class="evidence-top"><div class="evidence-title"><span class="rank">'+(i+1)+'</span><span>Evidence '+(i+1)+'</span></div><span class="distance">'+escapeHtml(d)+'</span></div><p>'+escapeHtml((x.text||"").slice(0,520))+'</p></article>';
-  }).join("");
-}
-async function runQuery(){
-  const q=document.getElementById("question").value.trim(); if(!q){notice("Enter a question first.","err");return}
-  const btn=document.getElementById("queryBtn");btn.disabled=true;btn.textContent="Searching…";notice("");
-  try{
-    const [retrieval,query]=await Promise.all([
-      api("/rag/v1/retrieve",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({collection,question:q,top_k:6})}),
-      api("/rag/v1/query",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({collection,question:q,top_k:6})})
-    ]);
-    if(!retrieval.ok) throw new Error(retrieval.body.detail||("Retrieve HTTP "+retrieval.status));
-    if(!query.ok) throw new Error(query.body.detail||("Query HTTP "+query.status));
-    lastQuestion=q;lastEvidence=retrieval.body.chunks||[];lastQueryAnswer=query.body;
-    renderEvidence(lastEvidence);
-    notice("Search completed. Review the evidence or make a structured decision.","ok");
-  }catch(e){notice("Search failed: "+e.message,"err")}
-  finally{btn.disabled=false;btn.textContent="Search knowledge"}
-}
-function renderProbabilities(probs){
-  return '<div class="probs">'+Object.entries(probs||{}).sort((a,b)=>b[1]-a[1]).map(([k,v])=>
-    '<div class="prob"><span>'+escapeHtml(k)+'</span><div class="track"><div class="fill" style="width:'+Math.max(0,Math.min(100,v*100))+'%"></div></div><strong>'+Math.round(v*100)+'%</strong></div>'
-  ).join("")+'</div>';
-}
-function renderDecisionBody(body){
-  const answers=body.answers||{}, route=answers.route||{}, actionable=answers.actionable||{}, confidence=answers.confidence||{};
-  let html='<div class="decision-list">';
-  html+='<div class="decision choice"><h3>Recommended path <span>choice</span></h3><div class="answer-main">'+escapeHtml(route.value??"—")+'</div>'+renderProbabilities(route.probabilities)+'</div>';
-  const p=Number(actionable.value);
-  html+='<div class="decision"><h3>Actionable now <span>probability</span></h3><div class="metric"><strong>'+(!Number.isNaN(p)?Math.round(p*100)+"%":"—")+'</strong><span>probability true</span></div></div>';
-  html+='<div class="decision"><h3>Evidence strength <span>score</span></h3><div class="metric"><strong>'+escapeHtml(confidence.value??"—")+'</strong><span>on the configured scale</span></div></div>';
-  html+='</div>';
-  const rt=body.route||{}, usage=body.usage||{};
-  html+='<div class="details"><details><summary>Technical details</summary><div class="tech"><div>Instance<b>'+escapeHtml(rt.provider??"—")+'</b></div><div>Model<b>'+escapeHtml(rt.model??"—")+'</b></div><div>Latency<b>'+escapeHtml(body.latency_ms??"—")+' ms</b></div><div>Tokens<b>'+escapeHtml(usage.total_tokens??"—")+'</b></div></div></details></div>';
-  return html;
-}
-async function makeDecision(){
-  const q=document.getElementById("question").value.trim();if(!q){notice("Enter a question first.","err");return}
-  const state={question:q,collection,evidence:lastEvidence.map(x=>x.text||"").slice(0,6),rag_answer:lastQueryAnswer?.answer||null};
-  const el=document.getElementById("decision");el.className="empty";el.textContent="Making decision…";
-  try{
-    const res=await api("/v2/decide",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({state,questions:DECISION_QUESTIONS})});
-    if(!res.ok) throw new Error(res.body.detail||("HTTP "+res.status));
-    el.className="";el.innerHTML=renderDecisionBody(res.body);
-    document.getElementById("decisionMeta").textContent="Generated just now";
-  }catch(e){el.className="notice err";el.textContent="Decision failed: "+e.message}
-}
-async function runBatch(){
-  const lines=document.getElementById("batchInput").value.split("\n").map(x=>x.trim()).filter(Boolean).slice(0,100);
-  if(!lines.length){document.getElementById("batchResult").innerHTML='<div class="notice err">Add at least one item.</div>';return}
-  const btn=document.getElementById("batchBtn");btn.disabled=true;btn.textContent="Triaging…";
-  const qs={category:{type:"choice",instructions:"What kind of item is this?",criteria:{needs_action:"Needs action",information:"Information only",review:"Needs human review"}},urgent:{type:"null",instructions:"Is this urgent?"}};
-  try{
-    const res=await api("/v2/batch",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({requests:lines.map((state,i)=>({request_id:"ui-"+(i+1),state,questions:qs}))})});
-    if(!res.ok) throw new Error(res.body.detail||("HTTP "+res.status));
-    const rows=(res.body.results||[]).map((item,i)=>{
-      if(!item.ok) return '<tr><td>'+(i+1)+'</td><td>'+escapeHtml(lines[i])+'</td><td colspan="2">Error</td></tr>';
-      const ans=item.result?.answers||{}, cat=ans.category||{}, urg=ans.urgent||{};
-      return '<tr><td>'+(i+1)+'</td><td>'+escapeHtml(lines[i].slice(0,90))+'</td><td>'+escapeHtml(cat.value??"—")+'</td><td>'+(!Number.isNaN(Number(urg.value))?Math.round(Number(urg.value)*100)+"%":"—")+'</td></tr>';
-    }).join("");
-    document.getElementById("batchResult").innerHTML='<table class="batch-table"><thead><tr><th>#</th><th>Item</th><th>Category</th><th>Urgent</th></tr></thead><tbody>'+rows+'</tbody></table>';
-  }catch(e){document.getElementById("batchResult").innerHTML='<div class="notice err">Batch failed: '+escapeHtml(e.message)+'</div>'}
-  finally{btn.disabled=false;btn.textContent="Triage items"}
-}
-async function refreshStatus(){
-  const [runtime,rag,providers]=await Promise.all([api("/health"),api("/rag/v1/health"),api("/v2/providers")]);
-  const ok=runtime.ok&&rag.ok;
-  document.getElementById("systemDot").className="dot "+(ok?"ok":"bad");
-  document.getElementById("systemText").textContent=ok?"All services available":"One or more services need attention";
-  document.getElementById("runtimeChip").textContent="Runtime · "+(runtime.ok?"healthy":"unavailable");
-  document.getElementById("ragChip").textContent="RAG · "+(rag.ok?"healthy":"unavailable");
-  document.getElementById("healthCluster").innerHTML=
-    '<div class="health"><span class="dot '+(runtime.ok?"ok":"bad")+'"></span>Decision runtime</div>'+
-    '<div class="health"><span class="dot '+(rag.ok?"ok":"bad")+'"></span>Knowledge service</div>';
-  const el=document.getElementById("providers");
-  if(providers.ok){
-    const list=providers.body.providers||[];
-    el.innerHTML=list.length?list.map(p=>'<div class="provider"><div><b>'+escapeHtml(p.id||"Instance")+'</b><small>'+escapeHtml(p.model||"No model")+' · '+escapeHtml(p.driver||"")+'</small></div><span class="badge">configured</span></div>').join(""):'<div class="empty">No inference instances configured.</div>';
-  }else el.innerHTML='<div class="notice err">Provider registry unavailable.</div>';
-}
-refreshStatus(); setInterval(refreshStatus,15000);
+function openSystem(){document.getElementById("drawer").classList.add("open");refreshSystem();renderHistory()}function closeSystem(){document.getElementById("drawer").classList.remove("open")}
+renderActivity();renderHistory();refreshSystem();setInterval(refreshSystem,15000);
 </script>
-</body>
-</html>
+</body></html>
