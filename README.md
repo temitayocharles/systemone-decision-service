@@ -46,6 +46,13 @@ curl http://localhost:8002/health
 curl http://localhost:8002/v2/providers
 ```
 
+The Compose stack bootstraps the bundled Ollama models used by the default local configuration:
+
+- `qwen2.5:3b` for generation and the default local System One provider
+- `nomic-embed-text` for the RAG example service
+
+Model files persist in the `ollama-data` volume, so subsequent starts reuse them.
+
 ## Provider configuration
 
 ```env
@@ -53,54 +60,22 @@ SYSTEMONE_PROVIDER_IDS=primary,secondary
 SYSTEMONE_DEFAULT_PROVIDER=primary
 
 SYSTEMONE_PROVIDER_PRIMARY_DRIVER=openai_compatible
-SYSTEMONE_PROVIDER_PRIMARY_BASE_URL=https://inference.example/v1
-SYSTEMONE_PROVIDER_PRIMARY_MODEL=model-a
+SYSTEMONE_PROVIDER_PRIMARY_BASE_URL=http://ollama:11434/v1
+SYSTEMONE_PROVIDER_PRIMARY_MODEL=qwen2.5:3b
 SYSTEMONE_PROVIDER_PRIMARY_API_KEY=
-
-SYSTEMONE_PROVIDER_SECONDARY_DRIVER=openai_compatible
-SYSTEMONE_PROVIDER_SECONDARY_BASE_URL=http://model-server:8000/v1
-SYSTEMONE_PROVIDER_SECONDARY_MODEL=model-b
-SYSTEMONE_PROVIDER_SECONDARY_API_KEY=
 ```
 
-Instance labels are arbitrary deployment identifiers.
+See `.env.example` for the full local and secondary instance configuration.
 
 ## Decision request
 
-```json
-{
-  "state": {
-    "service": "payments",
-    "status": "degraded"
-  },
-  "questions": {
-    "route": {
-      "type": "choice",
-      "instructions": "Select the best response path.",
-      "criteria": {
-        "investigate": "Investigate first",
-        "rollback": "Rollback",
-        "observe": "Continue observing"
-      }
-    }
-  }
-}
-```
-
-Send to `POST /v2/decide`.
+Send typed state/questions to `POST /v2/decide`.
 
 A request can use the configured default instance, explicitly name one instance, request an ensemble, or provide an empirical routing policy.
 
 ## Capability-aware empirical routing
 
-Instances can declare open-ended capabilities and typed attributes:
-
-```env
-SYSTEMONE_PROVIDER_PRIMARY_CAPABILITIES=private_runtime,structured_output
-SYSTEMONE_PROVIDER_PRIMARY_ATTRIBUTES_JSON={"local":true,"max_context":32768,"region":"ca-central"}
-```
-
-Benchmark records are keyed by provider instance, model, and task type and include run provenance. Routing policies filter candidates by capabilities, attributes, observed health, accuracy, calibration error, latency, failure rate, and known cost before empirical scoring.
+Instances can declare open-ended capabilities and typed attributes. Benchmark records are keyed by provider instance, model, and task type and include run provenance. Routing policies filter candidates by capabilities, attributes, observed health, accuracy, calibration error, latency, failure rate, and known cost before empirical scoring.
 
 ## Calibration
 
@@ -128,6 +103,8 @@ The included RAG service is optional:
 ```text
 documents -> retrieval -> evidence -> System One -> typed decision
 ```
+
+The default Compose stack includes Chroma and the local Ollama models required by the example.
 
 ## Documentation
 
