@@ -3,9 +3,15 @@ from __future__ import annotations
 import importlib
 import os
 import re
-from dataclasses import dataclass
-from typing import Dict, Iterable, Optional
+from dataclasses import dataclass, field
+from typing import Any, Dict, Iterable, Optional, Set
 
+from ..capabilities import (
+    CapabilityProfile,
+    derived_capabilities,
+    parse_attributes,
+    parse_capabilities,
+)
 from .base import DecisionProvider
 from .openai_compatible import OpenAICompatibleProvider
 from .systemone_http import NativeSystemOneHTTPProvider
@@ -20,6 +26,8 @@ class ProviderInstance:
     api_key: str = ""
     timeout_s: float = 60.0
     max_parallel: int = 8
+    capabilities: Set[str] = field(default_factory=set)
+    attributes: Dict[str, Any] = field(default_factory=dict)
 
 
 def _env_prefix(instance_id: str) -> str:
@@ -34,6 +42,11 @@ def _read_instance(instance_id: str) -> ProviderInstance:
     driver = os.getenv(f"{prefix}_DRIVER", "").strip()
     if not driver:
         raise ValueError(f"{prefix}_DRIVER is required")
+
+    declared = parse_capabilities(os.getenv(f"{prefix}_CAPABILITIES", ""))
+    capabilities = derived_capabilities(driver) | declared
+    attributes = parse_attributes(os.getenv(f"{prefix}_ATTRIBUTES_JSON", ""))
+
     return ProviderInstance(
         instance_id=instance_id,
         driver=driver,
@@ -42,6 +55,8 @@ def _read_instance(instance_id: str) -> ProviderInstance:
         api_key=os.getenv(f"{prefix}_API_KEY", ""),
         timeout_s=float(os.getenv(f"{prefix}_TIMEOUT_S", "60")),
         max_parallel=int(os.getenv(f"{prefix}_MAX_PARALLEL", "8")),
+        capabilities=capabilities,
+        attributes=attributes,
     )
 
 
@@ -120,6 +135,16 @@ class ProviderRegistry:
     def first_name(self) -> Optional[str]:
         return next(iter(self._providers), None)
 
+    def capability_profiles(self) -> Dict[str, CapabilityProfile]:
+        return {
+            item.instance_id: CapabilityProfile(
+                provider=item.instance_id,
+                capabilities=set(item.capabilities),
+                attributes=dict(item.attributes),
+            )
+            for item in self._instances.values()
+        }
+
     def describe(self) -> list[dict]:
         return [
             {
@@ -130,6 +155,8 @@ class ProviderRegistry:
                 "authenticated": bool(item.api_key),
                 "timeout_s": item.timeout_s,
                 "max_parallel": item.max_parallel,
+                "capabilities": sorted(item.capabilities),
+                "attributes": item.attributes,
             }
             for item in self._instances.values()
         ]

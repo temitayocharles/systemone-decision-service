@@ -5,6 +5,7 @@ import os
 import uuid
 from typing import Any, Dict, Iterable, Mapping, Optional
 
+from .health import latest_health
 from .providers.base import ProviderResult
 from .providers.registry import ProviderRegistry
 from .selection import BenchmarkStore, SelectionPolicy, choose_model
@@ -54,7 +55,12 @@ class DecisionRuntime:
         selected_provider = provider
         selected_model = model
         if selected_provider is None and policy is not None:
-            selected = choose_model(self.benchmarks.load(), policy)
+            selected = choose_model(
+                self.benchmarks.load(),
+                policy,
+                capabilities=self.providers.capability_profiles(),
+                health=latest_health(self.telemetry.read(limit=10000)),
+            )
             selected_provider = selected.provider
             selected_model = selected.model
 
