@@ -1,15 +1,13 @@
 #!/usr/bin/env python3
-"""Serve the System One demo UI and proxy API calls to the runtime.
+"""Serve the System One workspace and proxy its two local APIs.
 
-Why this exists: browsers block cross-origin POSTs, and the runtime does
-not ship CORS headers. This tiny server (stdlib only) serves the UI at /
-and forwards /health and /v2/* to the runtime on localhost:8002, same
-origin, so everything just works.
+The browser uses one origin:
+- /health and /v2/* -> System One runtime (default localhost:8002)
+- /rag/*            -> RAG service (default localhost:8001), with /rag removed
 
 Run:
-    python3 serve_demo.py [--port 8080] [--runtime http://localhost:8002]
-
-Then open http://localhost:8080 in a browser.
+    python3 serve_demo.py
+    python3 serve_demo.py --port 8080 --runtime http://localhost:8002 --rag http://localhost:8001
 """
 
 from __future__ import annotations
@@ -26,8 +24,9 @@ UI_FILE = os.path.join(HERE, "system-one-demo-ui.html")
 
 class Handler(BaseHTTPRequestHandler):
     runtime = "http://localhost:8002"
+    rag = "http://localhost:8001"
 
-    def log_message(self, *args):  # quieter logs
+    def log_message(self, *args):
         pass
 
     def _cors(self):
@@ -42,12 +41,12 @@ class Handler(BaseHTTPRequestHandler):
 
     def _serve_ui(self):
         try:
-            with open(UI_FILE, "rb") as f:
-                body = f.read()
+            with open(UI_FILE, "rb") as handle:
+                body = handle.read()
         except FileNotFoundError:
             self.send_response(404)
             self.end_headers()
-            self.wfile.write(b"UI file not found next to serve_demo.py")
+            self.wfile.write(b"UI file not found")
             return
         self.send_response(200)
         self.send_header("Content-Type", "text/html; charset=utf-8")
@@ -55,43 +54,49 @@ class Handler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(body)
 
+    def _target(self):
+        if self.path.startswith("/rag/"):
+            return self.rag + self.path[len("/rag"):]
+        return self.runtime + self.path
+
     def _proxy(self):
         data = None
         if self.command in ("POST", "PUT"):
             length = int(self.headers.get("Content-Length", 0) or 0)
             data = self.rfile.read(length) if length else None
-        req = urllib.request.Request(
-            self.runtime + self.path, data=data, method=self.command
-        )
+
+        req = urllib.request.Request(self._target(), data=data, method=self.command)
         if data:
             req.add_header(
                 "Content-Type",
                 self.headers.get("Content-Type", "application/json"),
             )
+
         try:
-            with urllib.request.urlopen(req, timeout=180) as r:
-                body = r.read()
-                self.send_response(r.status)
+            with urllib.request.urlopen(req, timeout=240) as response:
+                body = response.read()
+                self.send_response(response.status)
                 self.send_header(
                     "Content-Type",
-                    r.headers.get("Content-Type", "application/json"),
+                    response.headers.get("Content-Type", "application/json"),
                 )
                 self._cors()
                 self.send_header("Content-Length", str(len(body)))
                 self.end_headers()
                 self.wfile.write(body)
-        except urllib.error.HTTPError as e:
-            # Pass 4xx/5xx through untouched: the 422 and 502 demos
-            # depend on seeing the real status codes.
-            body = e.read()
-            self.send_response(e.code)
-            self.send_header("Content-Type", "application/json")
+        except urllib.error.HTTPError as exc:
+            body = exc.read()
+            self.send_response(exc.code)
+            self.send_header(
+                "Content-Type",
+                exc.headers.get("Content-Type", "application/json"),
+            )
             self._cors()
             self.send_header("Content-Length", str(len(body)))
             self.end_headers()
             self.wfile.write(body)
-        except Exception as e:  # runtime down
-            body = ('{"error": "runtime unreachable: %s"}' % e).encode()
+        except Exception as exc:
+            body = ('{"detail":"upstream unavailable: %s"}' % exc).encode()
             self.send_response(502)
             self.send_header("Content-Type", "application/json")
             self._cors()
@@ -113,14 +118,19 @@ class Handler(BaseHTTPRequestHandler):
 
 
 def main():
-    ap = argparse.ArgumentParser()
-    ap.add_argument("--port", type=int, default=8080)
-    ap.add_argument("--runtime", default="http://localhost:8002")
-    args = ap.parse_args()
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--port", type=int, default=8080)
+    parser.add_argument("--runtime", default="http://localhost:8002")
+    parser.add_argument("--rag", default="http://localhost:8001")
+    args = parser.parse_args()
+
     Handler.runtime = args.runtime.rstrip("/")
+    Handler.rag = args.rag.rstrip("/")
+
     server = ThreadingHTTPServer(("127.0.0.1", args.port), Handler)
-    print(f"Demo UI:  http://localhost:{args.port}")
-    print(f"Runtime:  {Handler.runtime}")
+    print(f"System One UI: http://localhost:{args.port}")
+    print(f"Runtime:       {Handler.runtime}")
+    print(f"RAG:           {Handler.rag}")
     print("Press Ctrl-C to stop.")
     server.serve_forever()
 
