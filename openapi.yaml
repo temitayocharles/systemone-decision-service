@@ -1,282 +1,188 @@
 openapi: 3.0.3
 info:
-  title: System One Decision Service
-  version: 0.1.0
+  title: System One Decision Runtime
+  version: 0.2.0
+  description: Provider-independent runtime for typed probabilistic decisions.
 servers:
   - url: http://localhost:8002
 paths:
   /v1/health:
     get:
-      summary: Health check
+      summary: Runtime health
       responses:
         '200':
-          description: ok
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/HealthResponse'
-  /v1/decide:
+          description: Runtime is healthy
+  /v2/decide:
     post:
-      summary: Evaluate one or more questions against a shared state
+      summary: Execute a typed decision request
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/DecisionRequest'
+              $ref: '#/components/schemas/RuntimeRequest'
       responses:
         '200':
-          description: Decision results
+          description: Decision result
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/DecisionResponse'
-        '400':
-          description: Validation error
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-        '422':
-          description: Unprocessable entity
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
+                type: object
         '502':
-          description: Model provider failed or is not configured; no probabilities were invented
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-  /v1/calibrate:
+          description: Routing, provider, or inference failure
+  /v2/batch:
     post:
-      summary: Fit a temperature scalar for a question type using NLL
+      summary: Execute a batch of decision requests
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/CalibrationRequest'
+              type: object
+              required: [requests]
+              properties:
+                requests:
+                  type: array
+                  minItems: 1
+                  maxItems: 100
+                  items:
+                    $ref: '#/components/schemas/RuntimeRequest'
       responses:
         '200':
-          description: Calibration result
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/CalibrationResponse'
-        '400':
-          description: Validation error
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-        '422':
-          description: Unprocessable entity
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
+          description: Batch results
+  /v2/providers:
+    get:
+      summary: List configured provider instances and capabilities
+      responses:
+        '200':
+          description: Provider instance metadata
+  /v2/metrics:
+    get:
+      summary: Runtime telemetry summary
+      parameters:
+        - in: query
+          name: limit
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 10000
+            default: 1000
+      responses:
+        '200':
+          description: Runtime metrics
+  /v2/benchmarks:
+    get:
+      summary: List empirical benchmark records
+      responses:
+        '200':
+          description: Benchmark records
+    put:
+      summary: Upsert an empirical benchmark record
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BenchmarkRecord'
+      responses:
+        '200':
+          description: Benchmark record persisted
 components:
   schemas:
-    Error:
-      type: object
-      required: [detail]
-      properties:
-        detail:
-          oneOf:
-            - type: string
-            - type: array
-              items:
-                type: object
-      additionalProperties: true
-    HealthResponse:
-      type: object
-      required: [status, version]
-      properties:
-        status:
-          type: string
-          enum: [ok]
-        version:
-          type: string
-    Question:
-      oneOf:
-        - $ref: '#/components/schemas/ChoiceQuestion'
-        - $ref: '#/components/schemas/ScoreQuestion'
-        - $ref: '#/components/schemas/NoulQuestion'
-    ChoiceQuestion:
-      type: object
-      required: [type, prompt, options]
-      properties:
-        type:
-          type: string
-          enum: [choice]
-        prompt:
-          type: string
-        options:
-          type: object
-          additionalProperties:
-            type: string
-      additionalProperties: false
-    ScoreQuestion:
-      type: object
-      required: [type, prompt, min, max]
-      properties:
-        type:
-          type: string
-          enum: [score]
-        prompt:
-          type: string
-        min:
-          type: integer
-        max:
-          type: integer
-        labels:
-          type: array
-          items:
-            type: integer
-      additionalProperties: false
-    NoulQuestion:
-      type: object
-      required: [type, prompt]
-      properties:
-        type:
-          type: string
-          enum: [noul]
-        prompt:
-          type: string
-      additionalProperties: false
-    DecisionRequest:
+    RuntimeRequest:
       type: object
       required: [state, questions]
       properties:
         state:
-          type: string
-          minLength: 1
+          nullable: true
         questions:
           type: object
+          minProperties: 1
           additionalProperties:
-            $ref: '#/components/schemas/Question'
-    ChoiceAnswer:
-      type: object
-      required: [type, value, probabilities, confidence]
-      properties:
-        type:
+            type: object
+        provider:
           type: string
-          enum: [choice]
-        value:
+          nullable: true
+        model:
           type: string
-        probabilities:
-          type: object
-          additionalProperties:
-            type: number
-        confidence:
-          type: number
-    ScoreAnswer:
-      type: object
-      required: [type, value, probabilities, confidence]
-      properties:
-        type:
-          type: string
-          enum: [score]
-        value:
-          type: integer
-        probabilities:
-          type: object
-          additionalProperties:
-            type: number
-        confidence:
-          type: number
-    NoulAnswer:
-      type: object
-      required: [type, value, confidence]
-      properties:
-        type:
-          type: string
-          enum: [noul]
-        value:
-          type: number
-          minimum: 0
-          maximum: 1
-        confidence:
-          type: number
-          minimum: 0
-          maximum: 1
-    DecisionResponse:
-      type: object
-      required: [results]
-      properties:
-        results:
-          type: object
-          additionalProperties:
-            oneOf:
-              - $ref: '#/components/schemas/ChoiceAnswer'
-              - $ref: '#/components/schemas/ScoreAnswer'
-              - $ref: '#/components/schemas/NoulAnswer'
-        meta:
-          type: object
-          properties:
-            model:
-              type: string
-            temperatures:
-              type: object
-              additionalProperties:
-                type: number
-            calibrated:
-              type: object
-              additionalProperties:
-                type: boolean
-            latency_ms:
-              type: integer
-            usage:
-              type: object
-              additionalProperties:
-                type: integer
-            note:
-              type: string
-    CalibrationExample:
-      type: object
-      required: [state, question, label]
-      properties:
-        state:
-          type: string
-        question:
-          $ref: '#/components/schemas/Question'
-        label:
-          oneOf:
-            - type: string
-            - type: integer
-            - type: number
-    CalibrationRequest:
-      type: object
-      required: [question_type, examples]
-      properties:
-        question_type:
-          type: string
-          enum: [choice, score, noul]
-        examples:
+          nullable: true
+        policy:
+          $ref: '#/components/schemas/SelectionPolicy'
+        ensemble:
           type: array
-          minItems: 50
           items:
-            $ref: '#/components/schemas/CalibrationExample'
-    CalibrationResponse:
-      type: object
-      required: [question_type, n_examples, temperature, ece_before, ece_after, reliability_diagram]
-      properties:
-        question_type:
+            type: string
+        request_id:
           type: string
-          enum: [choice, score, noul]
-        n_examples:
+          nullable: true
+    SelectionPolicy:
+      type: object
+      properties:
+        task_type:
+          type: string
+          default: generic
+        max_ece:
+          type: number
+          nullable: true
+        max_p95_latency_ms:
+          type: number
+          nullable: true
+        max_cost_per_1000:
+          type: number
+          nullable: true
+        min_accuracy:
+          type: number
+          nullable: true
+        preferred_provider:
+          type: string
+          nullable: true
+        required_capabilities:
+          type: array
+          items:
+            type: string
+        forbidden_capabilities:
+          type: array
+          items:
+            type: string
+        min_attributes:
+          type: object
+          additionalProperties:
+            type: number
+        max_attributes:
+          type: object
+          additionalProperties:
+            type: number
+        attribute_equals:
+          type: object
+          additionalProperties: true
+        require_healthy:
+          type: boolean
+          default: true
+    BenchmarkRecord:
+      type: object
+      required: [provider, model, task_type]
+      properties:
+        provider:
+          type: string
+        model:
+          type: string
+        task_type:
+          type: string
+        samples:
           type: integer
-        temperature:
-          type: number
-        ece_before:
-          type: number
-        ece_after:
-          type: number
+          default: 0
         accuracy:
           type: number
-        reliability_diagram:
-          type: object
-        note:
-          type: string
+          nullable: true
+        ece:
+          type: number
+          nullable: true
+        p95_latency_ms:
+          type: number
+          nullable: true
+        cost_per_1000:
+          type: number
+          nullable: true
+        failure_rate:
+          type: number
+          default: 0

@@ -1,128 +1,149 @@
-# System One Decision Runtime
+# Decision Runtime
 
-System One is a provider-independent runtime for typed probabilistic decisions.
+System One exposes one stable decision contract across configurable inference backends.
 
-## Stable application contract
+## Runtime contract
 
-Applications call `POST /v2/decide` with:
+Primary endpoints:
 
-- `state`
-- typed questions
-- optionally a provider **instance ID**
-- optionally a model override
-- optionally an empirical routing policy
-- optionally an ensemble of provider instance IDs
+- `POST /v2/decide`
+- `POST /v2/batch`
+- `GET /v2/providers`
+- `GET /v2/metrics`
+- `GET /v2/benchmarks`
+- `PUT /v2/benchmarks`
 
-Application code does not need to know which vendor, local server, or model sits behind an instance.
+The runtime accepts state plus typed questions and returns normalized answers, routing metadata, token usage, and latency.
+
+## Question types
+
+### Choice
+
+Select one key from a finite option set and return a probability distribution.
+
+### Score
+
+Return a numeric score and confidence.
+
+### Null / noul
+
+Evaluate a proposition as a probability between 0 and 1.
 
 ## Provider instances
 
-Provider instances are created from deployment configuration.
+Provider instances are declared at deployment time.
+
+For instance ID `primary`:
+
+```env
+SYSTEMONE_PROVIDER_PRIMARY_DRIVER=openai_compatible
+SYSTEMONE_PROVIDER_PRIMARY_BASE_URL=https://inference.example/v1
+SYSTEMONE_PROVIDER_PRIMARY_MODEL=model-a
+SYSTEMONE_PROVIDER_PRIMARY_API_KEY=
+SYSTEMONE_PROVIDER_PRIMARY_TIMEOUT_S=60
+SYSTEMONE_PROVIDER_PRIMARY_MAX_PARALLEL=8
+```
+
+The list and default are configured independently:
 
 ```env
 SYSTEMONE_PROVIDER_IDS=primary,secondary
 SYSTEMONE_DEFAULT_PROVIDER=primary
-
-SYSTEMONE_PROVIDER_PRIMARY_DRIVER=openai_compatible
-SYSTEMONE_PROVIDER_PRIMARY_BASE_URL=https://example.invalid/v1
-SYSTEMONE_PROVIDER_PRIMARY_MODEL=model-from-this-deployment
-SYSTEMONE_PROVIDER_PRIMARY_API_KEY=secret-if-required
-
-SYSTEMONE_PROVIDER_SECONDARY_DRIVER=openai_compatible
-SYSTEMONE_PROVIDER_SECONDARY_BASE_URL=http://host.docker.internal:11434/v1
-SYSTEMONE_PROVIDER_SECONDARY_MODEL=another-model
-SYSTEMONE_PROVIDER_SECONDARY_API_KEY=
 ```
 
-The labels `primary` and `secondary` are examples only. They have no built-in meaning.
+Instance names are arbitrary deployment identifiers.
 
-For an instance ID `foo-bar`, configuration uses the normalized prefix
-`SYSTEMONE_PROVIDER_FOO_BAR_*`.
+For an ID such as `local-box`, the configuration prefix is normalized to:
 
-## Built-in protocol drivers
+```text
+SYSTEMONE_PROVIDER_LOCAL_BOX_*
+```
 
-### `openai_compatible`
+## Protocol drivers
 
-For any endpoint exposing compatible `/chat/completions` token logprobs.
+### openai_compatible
 
-Configuration:
+Uses an OpenAI-compatible `/chat/completions` endpoint with token logprobs.
+
+Required deployment values:
 
 - `BASE_URL`
 - `MODEL`
-- optional `API_KEY`
-- optional `TIMEOUT_S`
-- optional `MAX_PARALLEL`
 
-An API key is not required by the runtime because local endpoints may not use authentication.
+Optional values:
 
-### `systemone_http`
+- `API_KEY`
+- `TIMEOUT_S`
+- `MAX_PARALLEL`
 
-For any service exposing a compatible `/v1/systemone` contract.
+Authentication is optional to support local endpoints.
 
-It is a protocol driver, not a vendor identity.
+### systemone_http
 
-### Custom Python drivers
+Uses a compatible `/v1/systemone` endpoint and normalizes responses into the runtime contract.
 
-A deployment may load a custom provider class:
+### Custom driver
+
+A provider implementation can be loaded dynamically:
 
 ```env
 SYSTEMONE_PROVIDER_CUSTOM_DRIVER=python:package.module:ProviderClass
 ```
 
-This keeps new provider integrations out of application code.
+The application contract remains unchanged when a new driver is introduced.
 
-## Default selection
+## Routing modes
 
-There is no hardcoded default provider or model.
+### Default route
 
-- If `SYSTEMONE_DEFAULT_PROVIDER` is set, it is used.
-- Otherwise the first configured instance in `SYSTEMONE_PROVIDER_IDS` is used.
-- If no instance is configured and no application-registered provider exists, the runtime refuses the request with a configuration error.
+Uses `SYSTEMONE_DEFAULT_PROVIDER`, or the first configured provider instance when no explicit default is set.
 
-## Empirical selection
+### Explicit route
 
-Benchmark records are persisted by:
+A request may provide `provider` and optionally `model`.
 
-```text
-provider-instance-id + model + task-type
-```
+### Empirical route
 
-Selection can constrain:
+A request may omit `provider` and supply a routing `policy`. The runtime evaluates capability, health, and benchmark constraints and selects an eligible provider/model record.
 
-- minimum measured accuracy
-- maximum ECE
-- maximum p95 latency
-- maximum cost per 1,000 decisions
-- provider-instance preference
+### Ensemble route
 
-The router therefore selects from what is actually configured and measured in that environment. It does not contain a vendor preference.
+A request may provide an `ensemble` list. Compatible outputs are combined into one normalized answer set.
 
-## Calibration
+## Calibration profiles
 
-Calibration profiles are versioned by:
+Calibration profiles are keyed by:
 
 ```text
-provider-instance-id:model:question-type:version
+provider-instance:model:question-type:version
 ```
 
-This allows the same model served from two different environments to be measured and calibrated independently.
+This keeps calibration specific to the actual serving context.
 
 ## Observability
 
-Every provider call records:
+Each runtime invocation records:
 
 - request ID
-- provider instance ID
-- actual model
+- provider instance
+- model
 - status
 - latency
-- reported token usage
+- token usage
 - question types
 
-## RAG relationship
+The telemetry stream supports health-aware routing and operational analysis.
 
-RAG is an integration/example, not the identity of System One.
+## Scaling model
 
-- RAG retrieves evidence.
-- System One produces typed probabilistic decisions.
-- Applications consume the stable runtime contract.
+The runtime API is stateless with respect to request execution. Persistent benchmark, telemetry, and calibration paths can be mounted or replaced by shared storage in clustered deployments.
+
+Provider instances can point to:
+
+- externally hosted inference
+- local inference servers
+- cluster-internal inference services
+- native System One services
+- custom drivers
+
+Horizontal runtime scaling does not change the caller contract.

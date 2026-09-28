@@ -1,57 +1,94 @@
-# Evaluation harness
+# Evaluation Harness
 
-## Scope
+The evaluation tooling measures decision quality and calibration from labelled workloads.
 
-This project measures the choice, score, and noul decision paths against point-in-time evidence. The decision service is evaluated as a calibrated probability model. The RAG service is evaluated as a retrieval and generation path.
+## Benchmark runtime
 
-## Current implementation
+`eval/benchmark_runtime.py` executes a labelled dataset against a configured provider instance and records:
 
-`eval/evaluate.py` is an offline scorer: it reads a JSONL file of real
-recorded predictions (`{"p": <predicted probability>, "correct": 0|1}`) and
-reports accuracy, Brier score, ECE, and a reliability diagram. It invents
-nothing; with no input file it reports nothing. Record the predictions during
-real runs (for example, while calling /v1/calibrate against labeled data),
-then score them here.
+- sample count
+- exact-label accuracy
+- expected calibration error
+- p95 latency
+- failure rate
+- optional known cost per 1,000 decisions
 
-The repository does not currently implement the LLM-as-judge or raw-logprob baselines, p95 benchmark collection, or file export for PNG/SVG reliability diagrams. Those are acceptance targets for a fuller evaluation pass, not claims about the current script.
+Example:
 
-## Example data
-
-There is no bundled labeled example set. The old fixture (four incident-style
-choice cases with hardcoded probabilities) was removed because it measured
-nothing real. Bring at least 50 fresh labeled examples per question type when
-you run /v1/calibrate; the fitted temperature is only as honest as its data.
-
-## JSONL contract
-
-Each line is a single JSON object.
-
-```json
-{"state": "...", "question": {"type": "choice", "prompt": "...", "options": {"a": "...", "b": "..."}}, "label": "a"}
+```bash
+PYTHONPATH=. python eval/benchmark_runtime.py \
+  --dataset eval/data/routing.jsonl \
+  --provider primary \
+  --model model-a \
+  --task-type routing
 ```
 
-The numbered label values use the option key or score value, as relevant to that question type.
+The resulting benchmark record is persisted in the runtime benchmark store.
 
-## Target acceptance bars
+## Offline evaluator
 
-- ECE after calibration under 0.05 on the validation split, per question type
-- p95 latency under 500 ms for a single decision-service question
-- Cost per 1,000 decisions under $1 on the chosen provider
-- A/B/C baseline table published in the README or in the results output
-- Temperature scaling must reduce ECE in the calibration run or the calibration step is declared failed
+`eval/evaluate.py` scores recorded binary prediction rows.
 
-## Calibration proof currently available
+Input JSONL:
 
-No measured calibration proof exists yet. The machinery is in place and
-unit-tested: /v1/calibrate fits a temperature by minimizing NLL on labeled
-examples, persists it, and reports ECE before/after with a reliability
-diagram. Run it against a live provider on fresh labeled data, score the
-recorded predictions with eval/evaluate.py, and only then claim numbers.
-PNG/SVG export is not implemented.
+```json
+{"p": 0.82, "correct": 1}
+```
 
-## Definitions
+The evaluator reports:
 
-- ECE: expected calibration error
-- p95 latency: 95th percentile latency for one request
-- LLM-as-judge baseline: same task judged by a model with the same evidence set
-- Raw logprobs baseline: unscaled log-probabilities from the decision engine
+- accuracy
+- Brier score
+- expected calibration error
+- reliability diagram data
+
+## Labelled decision datasets
+
+Runtime benchmark rows contain:
+
+```json
+{
+  "state": "input state",
+  "question": {
+    "type": "choice",
+    "instructions": "Select the correct option.",
+    "criteria": {
+      "a": "Option A",
+      "b": "Option B"
+    }
+  },
+  "label": "a"
+}
+```
+
+The label format follows the question type:
+
+- choice: option key
+- score: numeric score
+- null/noul: expected proposition outcome
+
+Datasets should represent the workload and task distribution used in production.
+
+## Calibration workflow
+
+Calibration is fitted from labelled examples and persisted by provider instance, model, question type, and profile version.
+
+Evaluation should compare calibration before and after fitting and retain:
+
+- ECE
+- accuracy
+- sample count
+- reliability diagram data
+
+## Measurement principles
+
+Performance numbers are recorded only from executed workloads.
+
+For meaningful comparisons:
+
+- use the same labelled dataset across competing provider/model combinations
+- use comparable runtime conditions
+- report the benchmark sample count
+- keep task types separate where their distributions differ
+- record cost only when the source value is known
+- rerun benchmarks when the model, serving configuration, or calibration profile changes

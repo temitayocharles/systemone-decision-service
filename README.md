@@ -1,84 +1,213 @@
-# System One Decision Service + RAG Demo
+# System One Decision Runtime
 
-Jev proved the pattern; this is a working implementation on open models with honest, measurable calibration.
+System One is a provider-independent runtime for typed probabilistic decisions.
 
-## Positioning
+Applications submit state and typed questions through one stable API. The runtime resolves compatible provider instances from deployment configuration, filters them by capabilities and health, applies empirical performance constraints, and returns normalized decisions.
 
-This repo is a Jev-style implementation built on open models with measured calibration. It is not Jev. It is not a TypeSafe product, and it does not claim parity with TypeSafe RLCD training.
+## Core capabilities
 
-## Directory map
+- typed `choice`, `score`, and `null/noul` decisions
+- configurable provider instances
+- OpenAI-compatible logprob inference
+- native System One HTTP integration
+- custom Python drivers
+- capability-aware routing
+- empirical model selection
+- provider/model calibration profiles
+- batch decisions
+- provider ensembles
+- runtime telemetry and health-aware eligibility
+- benchmark and evaluation tooling
+- optional RAG integration
 
-- systemone-decision-service/
-  - openapi.yaml
-  - EVAL_HARNESS.md
-  - corpora/
-    - engineering/
-    - business/
-  - rag/
-  - decide/
-  - eval/
-  - demo/
-  - packet/
-  - docker-compose.yml
-  - README.md
+## Architecture
 
-## Quickstart
+```text
+Applications
+    |
+    v
+System One Decision Runtime
+    |
+    +-- capability filtering
+    +-- health eligibility
+    +-- empirical performance constraints
+    +-- calibrated model selection
+    |
+    v
+Provider instances
+    |
+    +-- OpenAI-compatible endpoints
+    +-- native System One endpoints
+    +-- custom drivers
+```
 
-The supported runtime is Python 3.11 for the local evaluation harness and Docker Compose for the services.
+Applications depend on the System One contract rather than a specific model host or inference vendor.
+
+## Quick start
+
+Copy the environment template:
+
+```bash
+cp .env.example .env
+```
+
+Configure one or more provider instances in `.env`, then start the stack:
 
 ```bash
 docker compose up -d --build
-docker compose exec ollama ollama pull nomic-embed-text
-docker compose exec ollama ollama pull qwen2.5:3b
-curl http://localhost:8001/v1/health
+```
+
+Runtime health:
+
+```bash
 curl http://localhost:8002/v1/health
 ```
 
-Run the live comparison after both health endpoints respond successfully:
+Configured provider instances:
 
 ```bash
-. .venv/bin/activate
-PYTHONPATH=. python demo/compare.py --question "My payment-service pod is in CrashLoopBackOff with exit code 137, what do I check first?" --collection engineering --top-k 8 --verbose
+curl http://localhost:8002/v2/providers
 ```
 
-## Status
+## Provider configuration
 
-Status is intentionally honest: verified means it ran, everything else is labeled as not yet measured.
+Provider instances are deployment-defined.
 
-**2026-09-24 repair:** the decision engine that shipped earlier was a keyword
-heuristic that invented probabilities (it boosted winners toward 0.95 and
-returned fixed 0.97/0.03/0.5 values for noul). It has been replaced with a real
-engine: single-label-token prompts against an OpenAI-compatible
-chat-completions endpoint, probabilities from the model's own token logprobs,
-temperature scaling fitted by minimizing NLL. Without a configured provider
-the service answers HTTP 502 instead of guessing.
+```env
+SYSTEMONE_PROVIDER_IDS=primary,secondary
+SYSTEMONE_DEFAULT_PROVIDER=primary
 
-- Engine: real logprob implementation; probabilities sum to 1, no boosting.
-- Calibration: temperature fitting per question type is implemented and
-  unit-tested on synthetic data with known temperatures (recovery verified).
-  NOT yet run against a live provider on labeled data, so no measured ECE,
-  accuracy, latency, or cost numbers exist yet. Do not claim them.
-- Tests: 19 unit + contract tests pass with a mocked provider
-  (`pytest tests/`); the one live-provider smoke test skips without
-  `DECIDE_API_KEY`.
-- Demo: rewritten. Path A queries RAG; Path B retrieves the same chunks and
-  filters them with one noul question per chunk ("does this chunk help answer
-  the user's question?", default threshold 0.7). Latencies are timed,
-  token counts are the providers' own reported usage. Nothing is padded or
-  estimated.
-- Services: RAG on :8001 (Ollama + ChromaDB), decision on :8002.
-- Provider for decisions: set `DECIDE_API_KEY` (and optionally
-  `DECIDE_BASE_URL` / `DECIDE_MODEL`) in `.env`; see `.env.example`.
-  NVIDIA's OpenAI-compatible endpoint is the default.
+SYSTEMONE_PROVIDER_PRIMARY_DRIVER=openai_compatible
+SYSTEMONE_PROVIDER_PRIMARY_BASE_URL=https://inference.example/v1
+SYSTEMONE_PROVIDER_PRIMARY_MODEL=model-a
+SYSTEMONE_PROVIDER_PRIMARY_API_KEY=
 
-## Demo command
+SYSTEMONE_PROVIDER_SECONDARY_DRIVER=openai_compatible
+SYSTEMONE_PROVIDER_SECONDARY_BASE_URL=http://model-server:8000/v1
+SYSTEMONE_PROVIDER_SECONDARY_MODEL=model-b
+SYSTEMONE_PROVIDER_SECONDARY_API_KEY=
+```
 
-## Video narration
+Instance labels are arbitrary. Provider/model changes are configuration changes rather than application-code changes.
 
-This is a working implementation of the Jev pattern on open models. The product here is the comparison between a full RAG answer and a filtered decision path that keeps only actionable evidence, with every number on screen actually measured.
+See [Decision Runtime](docs/DECISION_RUNTIME.md) for the full deployment contract.
 
-## Notes
+## Decision API
 
-- No secrets, API keys, or tokens are stored in this repo.
-- All model configuration is environment-driven.
-- Corpora are fictional Acme content only.
+`POST /v2/decide`
+
+```json
+{
+  "state": {
+    "service": "payments",
+    "status": "degraded"
+  },
+  "questions": {
+    "route": {
+      "type": "choice",
+      "instructions": "Select the best response path.",
+      "criteria": {
+        "investigate": "Investigate first",
+        "rollback": "Rollback",
+        "observe": "Continue observing"
+      }
+    }
+  }
+}
+```
+
+A caller may explicitly select a provider instance, request an ensemble, or provide a routing policy and allow the runtime to choose empirically.
+
+## Capability-aware routing
+
+Each provider instance can declare capabilities and typed attributes:
+
+```env
+SYSTEMONE_PROVIDER_PRIMARY_CAPABILITIES=private_runtime,structured_output
+SYSTEMONE_PROVIDER_PRIMARY_ATTRIBUTES_JSON={"local":true,"max_context":32768,"region":"ca-central"}
+```
+
+Policies can require or forbid capabilities and constrain attributes before empirical model scoring occurs.
+
+See [Capability Routing](docs/CAPABILITY_ROUTING.md).
+
+## Empirical selection
+
+Benchmarks are stored by:
+
+```text
+provider-instance + model + task-type
+```
+
+The selector can constrain:
+
+- accuracy
+- expected calibration error
+- p95 latency
+- failure rate
+- known cost
+- required/forbidden capabilities
+- typed attributes
+- observed health
+
+Only measured candidates satisfying the policy are eligible.
+
+See [Empirical Selection](docs/EMPIRICAL_SELECTION.md).
+
+## Calibration
+
+Calibration profiles are versioned independently for each provider instance, model, and question type:
+
+```text
+provider-instance:model:question-type:version
+```
+
+This allows the same model served from different environments to be calibrated independently.
+
+## Evaluation
+
+The repository includes:
+
+- `eval/benchmark_runtime.py` for live provider/model benchmarking
+- `eval/evaluate.py` for offline scoring
+- `EVAL_HARNESS.md` for dataset and measurement contracts
+
+Benchmarks are populated from labelled workloads. The repository does not ship fabricated performance results.
+
+## RAG integration
+
+The included RAG service demonstrates one integration path:
+
+```text
+documents -> retrieval -> evidence -> System One -> typed decision
+```
+
+RAG is optional. The Decision Runtime can consume state from any application or evidence source.
+
+## Service ports
+
+- Decision Runtime: `:8002`
+- RAG example service: `:8001`
+- Chroma: `:8000`
+- Ollama example service: `:11434`
+
+## Repository structure
+
+```text
+decide/     decision runtime, providers, calibration, routing
+eval/       benchmark and evaluation tooling
+rag/        optional RAG example service
+corpora/    example retrieval corpora
+demo/       integration examples
+docs/       runtime architecture and routing documentation
+tests/      unit and contract tests
+openapi.yaml
+```
+
+## Documentation
+
+- [Decision Runtime](docs/DECISION_RUNTIME.md)
+- [Capability Routing](docs/CAPABILITY_ROUTING.md)
+- [Empirical Selection](docs/EMPIRICAL_SELECTION.md)
+- [Evaluation Harness](EVAL_HARNESS.md)
+- [OpenAPI](openapi.yaml)
