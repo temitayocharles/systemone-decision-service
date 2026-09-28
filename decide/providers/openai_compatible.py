@@ -78,10 +78,14 @@ class OpenAICompatibleProvider(DecisionProvider):
             for qid, q in questions.items()
         }
         results, usage = await engine.decide(str(state), normalized)
+        answers = {
+            qid: _normalize_answer(answer)
+            for qid, answer in results.items()
+        }
         return ProviderResult(
             provider=self.name,
             model=selected_model,
-            answers=results,
+            answers=answers,
             usage=usage,
             latency_ms=int((time.perf_counter() - started) * 1000),
         )
@@ -107,3 +111,10 @@ def _normalize_question(question: Dict[str, Any]) -> Dict[str, Any]:
         q["max"] = max(1, len(criteria) - 1)
         q["labels"] = list(range(len(criteria)))
     return q
+
+
+def _normalize_answer(answer: Dict[str, Any]) -> Dict[str, Any]:
+    normalized = dict(answer)
+    if normalized.get("type") == "noul":
+        normalized["type"] = "null"
+    return normalized
