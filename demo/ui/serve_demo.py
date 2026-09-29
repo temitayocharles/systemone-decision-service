@@ -55,22 +55,15 @@ def scan_local_root(root: Path) -> List[Dict[str, Any]]:
                 text = ""
 
         metadata_text = (
-            f"File: {path.name}
-"
-            f"Type: {mimetype}
-"
-            f"Extension: {suffix or '(none)'}
-"
-            f"Size bytes: {stat.st_size}
-"
-            f"Modified: {_iso_timestamp(stat.st_mtime)}
-"
+            f"File: {path.name}\n"
+            f"Type: {mimetype}\n"
+            f"Extension: {suffix or '(none)'}\n"
+            f"Size bytes: {stat.st_size}\n"
+            f"Modified: {_iso_timestamp(stat.st_mtime)}\n"
         )
         content = metadata_text
         if text:
-            content += f"
-Extracted text:
-{text}"
+            content += f"\nExtracted text:\n{text}"
 
         files.append({
             "title": path.name,
