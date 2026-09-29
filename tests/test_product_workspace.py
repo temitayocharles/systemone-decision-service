@@ -27,8 +27,9 @@ def test_product_ui_has_readable_live_pipeline_states():
 def test_single_runbook_explains_stack_and_camera_flow():
     lower = RUNBOOK.lower()
     assert "single authoritative runbook" in lower
-    assert "explain the stack to the viewer" in lower
+    assert "walk through the repository architecture first" in lower
     assert "knowledge provenance" in lower
     assert "connect the real downloads folder" in lower
+    assert "demonstrate provider routing with the same evidence" in lower
     for cue in ("SAY", "SCREEN", "CLICK", "DO", "PAUSE", "EXPECT"):
         assert cue in RUNBOOK
