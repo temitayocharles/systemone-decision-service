@@ -60,7 +60,7 @@ Performance claims require executed labelled workloads.
 
 ## Documentation
 
-- [Operational Runbook](docs/RUNBOOK.md)
+- [Live Video Runbook](docs/RUNBOOK.md)
 - [Decision Runtime](docs/DECISION_RUNTIME.md)
 - [Capability Routing](docs/CAPABILITY_ROUTING.md)
 - [Empirical Selection](docs/EMPIRICAL_SELECTION.md)
