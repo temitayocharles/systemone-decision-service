@@ -14,34 +14,57 @@ class VectorStore:
         host = get_setting("CHROMA_HOST", "localhost")
         port = int(get_setting("CHROMA_PORT", "8000"))
         mode = get_setting("CHROMA_MODE", "remote").lower()
-        self._fallback_dir = Path(__file__).resolve().parents[2] / ".chroma"
+        self.host = host
+        self.port = port
+        self.mode = mode
+        self._fallback_dir = (
+            Path(__file__).resolve().parents[2] / ".chroma"
+        )
         self.client = None
         self._using_persistent = False
 
         if mode == "local":
-            self.client = chromadb.PersistentClient(path=str(self._fallback_dir))
+            self.client = chromadb.PersistentClient(
+                path=str(self._fallback_dir)
+            )
             self._using_persistent = True
             return
 
         try:
-            self.client = chromadb.HttpClient(host=host, port=port)
+            self.client = chromadb.HttpClient(
+                host=host,
+                port=port,
+            )
             self.client.list_collections()
         except Exception:
             if mode != "remote_with_local_fallback":
                 raise
-            self.client = chromadb.PersistentClient(path=str(self._fallback_dir))
+            self.client = chromadb.PersistentClient(
+                path=str(self._fallback_dir)
+            )
             self._using_persistent = True
 
     def _fallback_to_persistent(self):
         if self._using_persistent:
             return
-        if get_setting("CHROMA_MODE", "remote").lower() != "remote_with_local_fallback":
-            raise RuntimeError("remote Chroma unavailable and fallback is disabled")
-        self.client = chromadb.PersistentClient(path=str(self._fallback_dir))
+        if (
+            get_setting("CHROMA_MODE", "remote").lower()
+            != "remote_with_local_fallback"
+        ):
+            raise RuntimeError(
+                "remote Chroma unavailable and fallback is disabled"
+            )
+        self.client = chromadb.PersistentClient(
+            path=str(self._fallback_dir)
+        )
         self._using_persistent = True
 
     def get_or_create_collection(self, name: str):
         return self.client.get_or_create_collection(name=name)
+
+    def collection_count(self, name: str) -> int:
+        collection = self.get_or_create_collection(name)
+        return int(collection.count())
 
     @staticmethod
     def document_id(collection_name: str, text: str) -> str:
@@ -56,7 +79,10 @@ class VectorStore:
         metadatas: Optional[List[Dict[str, Any]]] = None,
     ) -> None:
         collection = self.get_or_create_collection(collection_name)
-        ids = [self.document_id(collection_name, text) for text in texts]
+        ids = [
+            self.document_id(collection_name, text)
+            for text in texts
+        ]
         kwargs: Dict[str, Any] = {
             "documents": texts,
             "embeddings": embeddings,
@@ -80,7 +106,9 @@ class VectorStore:
             )
         except Exception:
             self._fallback_to_persistent()
-            collection = self.get_or_create_collection(collection_name)
+            collection = self.get_or_create_collection(
+                collection_name
+            )
             results = collection.query(
                 query_embeddings=[query_embedding],
                 n_results=top_k,
@@ -94,7 +122,11 @@ class VectorStore:
             item: Dict[str, Any] = {"text": doc}
             if metas and index < len(metas):
                 item.update(metas[index] or {})
-            if distances and index < len(distances) and distances[index] is not None:
+            if (
+                distances
+                and index < len(distances)
+                and distances[index] is not None
+            ):
                 item["distance"] = float(distances[index])
             output.append(item)
         return output
