@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import hashlib
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
 import chromadb
 
@@ -53,11 +53,18 @@ class VectorStore:
         collection_name: str,
         texts: List[str],
         embeddings: List[List[float]],
+        metadatas: Optional[List[Dict[str, Any]]] = None,
     ) -> None:
         collection = self.get_or_create_collection(collection_name)
         ids = [self.document_id(collection_name, text) for text in texts]
-        # Deterministic IDs plus upsert make repeated ingestion idempotent.
-        collection.upsert(documents=texts, embeddings=embeddings, ids=ids)
+        kwargs: Dict[str, Any] = {
+            "documents": texts,
+            "embeddings": embeddings,
+            "ids": ids,
+        }
+        if metadatas is not None:
+            kwargs["metadatas"] = metadatas
+        collection.upsert(**kwargs)
 
     def query(
         self,
@@ -84,7 +91,7 @@ class VectorStore:
         distances = results.get("distances", [[]])[0]
         output: List[Dict[str, Any]] = []
         for index, doc in enumerate(docs):
-            item = {"text": doc}
+            item: Dict[str, Any] = {"text": doc}
             if metas and index < len(metas):
                 item.update(metas[index] or {})
             if distances and index < len(distances) and distances[index] is not None:
