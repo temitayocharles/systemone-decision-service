@@ -30,10 +30,10 @@ main{max-width:1240px;margin:0 auto;padding:28px}.hero h1{margin:0 0 6px;font-si
 <main>
 <div class="hero"><h1>Ask System One</h1><p>Use indexed knowledge and live inference to move from a question to evidence and a structured decision.</p></div>
 <section class="card ask">
-<div class="toolbar"><div class="tabs"><button class="tab active" data-col="engineering" onclick="setCollection('engineering')">Engineering</button><button class="tab" data-col="business" onclick="setCollection('business')">Business</button></div><button class="secondary" onclick="indexCollection()">Index collection</button></div>
-<div class="askbox"><textarea id="question">My payment-service pod is in CrashLoopBackOff with exit code 137. What should I check first?</textarea><div class="askfoot"><div class="examples"><button class="example" onclick="example('My payment-service pod is in CrashLoopBackOff with exit code 137. What should I check first?')">CrashLoopBackOff</button><button class="example" onclick="example('What is the approval threshold for a $12,000 invoice from a new vendor?')">Invoice approval</button><button class="example" onclick="example('Which evidence is most relevant and what should I do next?')">Evidence + action</button></div><button class="primary" id="askBtn" onclick="askSystemOne()">Ask System One</button></div></div>
+<div class="toolbar"><div class="tabs"><button class="tab active" data-col="engineering" onclick="setCollection('engineering')">Engineering</button><button class="tab" data-col="business" onclick="setCollection('business')">Business</button><button class="tab" data-col="downloads" onclick="setCollection('downloads')">Downloads</button></div><button class="secondary" id="indexBtn" onclick="indexCollection()">Index collection</button></div>
+<div class="askbox"><textarea id="question">My payment-service pod is in CrashLoopBackOff with exit code 137. What should I check first?</textarea><div class="askfoot"><div class="examples"><button class="example" onclick="example('My payment-service pod is in CrashLoopBackOff with exit code 137. What should I check first?')">CrashLoopBackOff</button><button class="example" onclick="example('What is the approval threshold for a $12,000 invoice from a new vendor?')">Invoice approval</button><button class="example" onclick="example('Which evidence is most relevant and what should I do next?')">Evidence + action</button><button class="example" onclick="chooseDownloadsDemo()">Live Downloads</button></div><button class="primary" id="askBtn" onclick="askSystemOne()">Ask System One</button></div></div>
 <div class="pipeline" id="pipeline"><div class="stage s1" id="s1"><b>1. Retrieve</b><span>Find relevant evidence</span></div><div class="stage s2" id="s2"><b>2. Answer</b><span>Generate grounded context</span></div><div class="stage s3" id="s3"><b>3. Decide</b><span>Produce typed probabilities</span></div><div class="stage s4" id="s4"><b>4. Record</b><span>Capture runtime telemetry</span></div></div>
-<div id="notice"></div>
+<div id="localSource" style="display:none;margin-top:10px;padding:10px 11px;border:1px solid var(--line);border-radius:10px;background:#fafbfc;font-size:10px;color:var(--muted)"></div><div id="notice"></div>
 </section>
 <section class="card prov" id="provenance">
   <div class="head"><div><h2>Knowledge provenance</h2><span id="provMeta">Loading selected collection…</span></div></div>
@@ -63,8 +63,27 @@ let collection="engineering",lastEvidence=[],lastAnswer=null;
 const qs={route:{type:"choice",instructions:"What is the best next step based on the question, answer, and evidence?",criteria:{investigate:"Investigate further",act:"Take the recommended action",observe:"Continue observing"}},actionable:{type:"null",instructions:"Is this actionable now?"},confidence:{type:"score",instructions:"How strongly does the evidence support a clear next step?",min:1,max:5}};
 const esc=v=>String(v??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#039;"}[c]));
 async function api(path,opts={}){const r=await fetch(path,opts),t=await r.text();let b;try{b=JSON.parse(t)}catch{b={raw:t}}return{ok:r.ok,status:r.status,body:b}}
-function setCollection(v){collection=v;document.querySelectorAll("[data-col]").forEach(x=>x.classList.toggle("active",x.dataset.col===v));resetQueryProvenance();refreshProvenance()}
+async function setCollection(v){
+ collection=v;
+ document.querySelectorAll("[data-col]").forEach(x=>x.classList.toggle("active",x.dataset.col===v));
+ resetQueryProvenance();
+ const btn=document.getElementById("indexBtn");
+ const local=document.getElementById("localSource");
+ if(v==="downloads"){
+   btn.textContent="Connect & index Downloads";
+   local.style.display="block";
+   await refreshDownloadsStatus();
+ }else{
+   btn.textContent="Index collection";
+   local.style.display="none";
+ }
+ refreshProvenance()
+}
 function example(q){document.getElementById("question").value=q}
+async function chooseDownloadsDemo(){
+ await setCollection("downloads");
+ document.getElementById("question").value="What files in my Downloads folder look important, duplicated, old, large, or worth organizing first?";
+}
 function notice(msg,type="ok"){document.getElementById("notice").innerHTML=msg?'<div class="notice '+type+'">'+esc(msg)+'</div>':""}
 function stage(n,state,ms=null){const e=document.getElementById("s"+n);e.className="stage s"+n+" "+state;const old=e.querySelector("small");if(old)old.remove();if(ms!=null){const s=document.createElement("small");s.textContent=ms<1000?Math.round(ms)+" ms":(ms/1000).toFixed(2)+" s";e.appendChild(s)}}
 function event(title,detail,type="ok"){const rows=JSON.parse(localStorage.getItem("so_activity")||"[]");rows.unshift({title,detail,type,ts:Date.now()});localStorage.setItem("so_activity",JSON.stringify(rows.slice(0,12)));renderActivity()}
@@ -92,7 +111,30 @@ async function refreshProvenance(){
  document.getElementById("pn-store").className="prov-node "+(p.indexed?"ready":"");
  document.getElementById("provDocs").innerHTML=(p.documents||[]).map(d=>'<span class="prov-doc">'+esc(d.source)+' · '+d.chunks+' chunk'+(d.chunks===1?"":"s")+'</span>').join("");
 }
-async function indexCollection(){notice("Indexing "+collection+"…");document.getElementById("pn-store").classList.add("live");const r=await api("/rag/v1/ingest",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({collection})});notice(r.ok?"Indexed "+collection+" · "+(r.body.chunks??0)+" chunks":"Index failed: "+(r.body.detail||r.status),r.ok?"ok":"bad");await refreshProvenance()}
+async function refreshDownloadsStatus(){
+ const el=document.getElementById("localSource");
+ const r=await api("/local/downloads/status");
+ if(!r.ok){el.textContent="Downloads unavailable: "+(r.body.detail||r.status);return}
+ const s=r.body;
+ el.innerHTML="<b style='color:var(--ink)'>Live local source</b> · "+esc(s.path)+" · "+s.files+" files · "+s.text_extractable+" text-readable · read-only";
+}
+async function indexCollection(){
+ notice("Indexing "+collection+"…");
+ document.getElementById("pn-store").classList.add("live");
+ const endpoint=collection==="downloads"?"/local/downloads/index":"/rag/v1/ingest";
+ const opts=collection==="downloads"?{method:"POST"}:{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({collection})};
+ const r=await api(endpoint,opts);
+ if(r.ok){
+   const count=r.body.chunks??r.body.documents??0;
+   notice("Indexed "+collection+" · "+count+" chunks","ok");
+   event("Source indexed",collection+" · "+count+" chunks","ok");
+   if(collection==="downloads")await refreshDownloadsStatus();
+ }else{
+   notice("Index failed: "+(r.body.detail||r.status),"bad");
+   event("Index failed",r.body.detail||String(r.status),"bad");
+ }
+ await refreshProvenance()
+}
 function renderEvidence(chunks){const e=document.getElementById("evidence");if(!chunks.length){e.className="empty";e.textContent="No source evidence was returned for this grounded answer.";return}e.className="evidence";e.innerHTML=chunks.map((x,i)=>{const source=x.source||x.source_path?.split("/").pop()||("Evidence "+(i+1));const bits=[x.collection||collection,x.chunk_index!=null?("chunk "+(Number(x.chunk_index)+1)):null,x.distance!=null?("distance "+Number(x.distance).toFixed(3)):null].filter(Boolean).join(" · ");return '<div class="ev"><div class="evtop"><div><b>'+esc(source)+'</b><div style="margin-top:3px;color:var(--muted)">'+esc(bits)+'</div></div><span>#'+(x.rank||i+1)+'</span></div><p>'+esc((x.text||"").slice(0,620))+'</p></div>'}).join("")}
 function renderAnswer(b){const e=document.getElementById("answerBlock");e.className="answer";e.innerHTML='<div class="label">Grounded answer</div><p>'+esc(b.answer||"No generated answer returned.")+'</p>'}
 function bars(p){return'<div class="bars">'+Object.entries(p||{}).sort((a,b)=>b[1]-a[1]).map(([k,v])=>'<div class="bar"><span>'+esc(k)+'</span><div class="track"><div class="fill" style="width:'+Math.round(v*100)+'%"></div></div><b>'+Math.round(v*100)+'%</b></div>').join("")+'</div>'}
