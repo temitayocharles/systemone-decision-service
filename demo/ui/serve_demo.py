@@ -1,24 +1,19 @@
 #!/usr/bin/env python3
-"""Serve the System One workspace, proxy APIs, and expose a read-only local source.
-
-The browser uses one origin:
-- /health and /v2/* -> System One runtime
-- /rag/*            -> RAG service, with /rag removed
-- /local/downloads/* -> read-only Downloads adapter on the host Mac
-"""
+"""Serve the System One workspace, proxy APIs, and expose a read-only local source."""
 
 from __future__ import annotations
 
 import argparse
 import json
 import mimetypes
-import os
+import threading
+import time
 import urllib.error
 import urllib.request
 from datetime import datetime, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from typing import Dict, List
+from typing import Any, Dict, List
 
 HERE = Path(__file__).resolve().parent
 UI_FILE = HERE / "system-one-demo-ui.html"
@@ -35,11 +30,11 @@ def _iso_timestamp(epoch: float) -> str:
     return datetime.fromtimestamp(epoch, tz=timezone.utc).isoformat()
 
 
-def scan_local_root(root: Path) -> List[Dict]:
+def scan_local_root(root: Path) -> List[Dict[str, Any]]:
     if not root.exists() or not root.is_dir():
         raise FileNotFoundError(f"Local source directory not found: {root}")
 
-    files: List[Dict] = []
+    files: List[Dict[str, Any]] = []
     for path in sorted(root.iterdir(), key=lambda p: p.name.lower()):
         if len(files) >= MAX_FILES:
             break
@@ -60,15 +55,22 @@ def scan_local_root(root: Path) -> List[Dict]:
                 text = ""
 
         metadata_text = (
-            f"File: {path.name}\n"
-            f"Type: {mimetype}\n"
-            f"Extension: {suffix or '(none)'}\n"
-            f"Size bytes: {stat.st_size}\n"
-            f"Modified: {_iso_timestamp(stat.st_mtime)}\n"
+            f"File: {path.name}
+"
+            f"Type: {mimetype}
+"
+            f"Extension: {suffix or '(none)'}
+"
+            f"Size bytes: {stat.st_size}
+"
+            f"Modified: {_iso_timestamp(stat.st_mtime)}
+"
         )
         content = metadata_text
         if text:
-            content += f"\nExtracted text:\n{text}"
+            content += f"
+Extracted text:
+{text}"
 
         files.append({
             "title": path.name,
@@ -92,6 +94,13 @@ class Handler(BaseHTTPRequestHandler):
     runtime = "http://localhost:8002"
     rag = "http://localhost:8001"
     local_root = Path.home() / "Downloads"
+    downloads_job_lock = threading.Lock()
+    downloads_job: Dict[str, Any] = {
+        "state": "idle",
+        "message": "Not started",
+        "started_at": None,
+        "finished_at": None,
+    }
 
     def log_message(self, *args):
         pass
@@ -101,14 +110,61 @@ class Handler(BaseHTTPRequestHandler):
         self.send_header("Access-Control-Allow-Methods", "GET, POST, PUT, OPTIONS")
         self.send_header("Access-Control-Allow-Headers", "Content-Type")
 
-    def _json(self, status: int, payload: Dict):
+    def _json(self, status: int, payload: Dict[str, Any]):
         body = json.dumps(payload).encode()
-        self.send_response(status)
-        self.send_header("Content-Type", "application/json")
-        self._cors()
-        self.send_header("Content-Length", str(len(body)))
-        self.end_headers()
-        self.wfile.write(body)
+        try:
+            self.send_response(status)
+            self.send_header("Content-Type", "application/json")
+            self._cors()
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+        except (BrokenPipeError, ConnectionResetError):
+            return
+
+    @classmethod
+    def _job_snapshot(cls) -> Dict[str, Any]:
+        with cls.downloads_job_lock:
+            return dict(cls.downloads_job)
+
+    @classmethod
+    def _set_job(cls, **values: Any) -> None:
+        with cls.downloads_job_lock:
+            cls.downloads_job.update(values)
+
+    @classmethod
+    def _run_downloads_index(cls) -> None:
+        try:
+            cls._set_job(state="scanning", message="Scanning Downloads", started_at=time.time(), finished_at=None)
+            documents = scan_local_root(cls.local_root)
+            cls._set_job(
+                state="indexing",
+                message=f"Embedding and indexing {len(documents)} files",
+                files_scanned=len(documents),
+            )
+            payload = json.dumps({"collection": "downloads", "documents": documents}).encode()
+            req = urllib.request.Request(
+                cls.rag + "/v1/ingest/documents",
+                data=payload,
+                method="POST",
+                headers={"Content-Type": "application/json"},
+            )
+            with urllib.request.urlopen(req, timeout=1800) as response:
+                body = json.loads(response.read().decode())
+            cls._set_job(
+                state="completed",
+                message=f"Indexed {body.get('chunks', 0)} chunks from {len(documents)} files",
+                finished_at=time.time(),
+                result=body,
+                error=None,
+            )
+        except Exception as exc:
+            cls._set_job(
+                state="failed",
+                message="Downloads indexing failed",
+                finished_at=time.time(),
+                error=str(exc),
+            )
 
     def do_OPTIONS(self):
         self.send_response(204)
@@ -145,20 +201,26 @@ class Handler(BaseHTTPRequestHandler):
         try:
             with urllib.request.urlopen(req, timeout=240) as response:
                 body = response.read()
-                self.send_response(response.status)
-                self.send_header("Content-Type", response.headers.get("Content-Type", "application/json"))
+                try:
+                    self.send_response(response.status)
+                    self.send_header("Content-Type", response.headers.get("Content-Type", "application/json"))
+                    self._cors()
+                    self.send_header("Content-Length", str(len(body)))
+                    self.end_headers()
+                    self.wfile.write(body)
+                except (BrokenPipeError, ConnectionResetError):
+                    return
+        except urllib.error.HTTPError as exc:
+            body = exc.read()
+            try:
+                self.send_response(exc.code)
+                self.send_header("Content-Type", exc.headers.get("Content-Type", "application/json"))
                 self._cors()
                 self.send_header("Content-Length", str(len(body)))
                 self.end_headers()
                 self.wfile.write(body)
-        except urllib.error.HTTPError as exc:
-            body = exc.read()
-            self.send_response(exc.code)
-            self.send_header("Content-Type", exc.headers.get("Content-Type", "application/json"))
-            self._cors()
-            self.send_header("Content-Length", str(len(body)))
-            self.end_headers()
-            self.wfile.write(body)
+            except (BrokenPipeError, ConnectionResetError):
+                return
         except Exception as exc:
             self._json(502, {"detail": f"upstream unavailable: {exc}"})
 
@@ -184,48 +246,36 @@ class Handler(BaseHTTPRequestHandler):
         except Exception as exc:
             self._json(500, {"detail": str(exc)})
 
-    def _downloads_index(self):
-        try:
-            documents = scan_local_root(self.local_root)
-            payload = json.dumps({
-                "collection": "downloads",
-                "documents": documents,
-            }).encode()
-            req = urllib.request.Request(
-                self.rag + "/v1/ingest/documents",
-                data=payload,
-                method="POST",
-                headers={"Content-Type": "application/json"},
-            )
-            with urllib.request.urlopen(req, timeout=240) as response:
-                body = json.loads(response.read().decode())
-            body["local_source"] = {
-                "path": str(self.local_root),
-                "read_only": True,
-                "files_scanned": len(documents),
-            }
-            self._json(200, body)
-        except urllib.error.HTTPError as exc:
-            raw = exc.read().decode(errors="replace")
-            try:
-                body = json.loads(raw)
-            except Exception:
-                body = {"detail": raw}
-            self._json(exc.code, body)
-        except Exception as exc:
-            self._json(500, {"detail": str(exc)})
+    def _downloads_index_start(self):
+        snapshot = self._job_snapshot()
+        if snapshot.get("state") in {"scanning", "indexing"}:
+            self._json(202, snapshot)
+            return
+        self._set_job(
+            state="queued",
+            message="Downloads indexing queued",
+            started_at=time.time(),
+            finished_at=None,
+            result=None,
+            error=None,
+        )
+        thread = threading.Thread(target=type(self)._run_downloads_index, daemon=True)
+        thread.start()
+        self._json(202, self._job_snapshot())
 
     def do_GET(self):
         if self.path in ("/", "/index.html"):
             self._serve_ui()
         elif self.path == "/local/downloads/status":
             self._downloads_status()
+        elif self.path == "/local/downloads/index/status":
+            self._json(200, self._job_snapshot())
         else:
             self._proxy()
 
     def do_POST(self):
         if self.path == "/local/downloads/index":
-            self._downloads_index()
+            self._downloads_index_start()
         else:
             self._proxy()
 
