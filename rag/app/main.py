@@ -35,12 +35,14 @@ pipeline = RAGPipeline()
 
 @app.on_event("startup")
 def startup() -> None:
-    # Production default is explicit ingestion. Demo users can opt in.
     if get_setting("RAG_INGEST_ON_STARTUP", "false").lower() not in {"1", "true", "yes"}:
         return
     names = [
         value.strip()
-        for value in get_setting("RAG_STARTUP_COLLECTIONS", "engineering,business").split(",")
+        for value in get_setting(
+            "RAG_STARTUP_COLLECTIONS",
+            "engineering,business",
+        ).split(",")
         if value.strip()
     ]
     for collection_name in names:
@@ -50,6 +52,19 @@ def startup() -> None:
 @app.get("/v1/health")
 def health() -> Dict[str, str]:
     return {"status": "ok", "version": "0.2.0"}
+
+
+@app.get("/v1/provenance/{collection}")
+def provenance(collection: str) -> Dict[str, Any]:
+    try:
+        return pipeline.provenance(collection)
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(
+            status_code=500,
+            detail=f"provenance failed: {exc}",
+        ) from exc
 
 
 @app.post("/v1/ingest")
@@ -67,28 +82,51 @@ def ingest(payload: IngestRequest) -> Dict[str, Any]:
 def retrieve(payload: RetrieveRequest) -> Dict[str, Any]:
     start = time.perf_counter()
     try:
-        result = pipeline.retrieve(payload.collection, payload.question, payload.top_k)
-        result["latency_ms"] = int((time.perf_counter() - start) * 1000)
+        result = pipeline.retrieve(
+            payload.collection,
+            payload.question,
+            payload.top_k,
+        )
+        result["latency_ms"] = int(
+            (time.perf_counter() - start) * 1000
+        )
         return result
     except FileNotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     except Exception as exc:
-        raise HTTPException(status_code=500, detail=f"retrieve failed: {exc}") from exc
+        raise HTTPException(
+            status_code=500,
+            detail=f"retrieve failed: {exc}",
+        ) from exc
 
 
 @app.post("/v1/query")
 def query(payload: QueryRequest) -> Dict[str, Any]:
     start = time.perf_counter()
     try:
-        result = pipeline.query(payload.collection, payload.question, payload.top_k)
-        result["latency_ms"] = int((time.perf_counter() - start) * 1000)
+        result = pipeline.query(
+            payload.collection,
+            payload.question,
+            payload.top_k,
+        )
+        result["latency_ms"] = int(
+            (time.perf_counter() - start) * 1000
+        )
         return result
     except FileNotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     except Exception as exc:
-        raise HTTPException(status_code=500, detail=f"query failed: {exc}") from exc
+        raise HTTPException(
+            status_code=500,
+            detail=f"query failed: {exc}",
+        ) from exc
 
 
 if __name__ == "__main__":
     port = int(get_setting("RAG_PORT", "8001"))
-    uvicorn.run("rag.app.main:app", host="0.0.0.0", port=port, reload=False)
+    uvicorn.run(
+        "rag.app.main:app",
+        host="0.0.0.0",
+        port=port,
+        reload=False,
+    )
