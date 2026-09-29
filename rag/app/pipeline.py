@@ -97,7 +97,7 @@ class RAGPipeline:
     def ingest_collection(self, collection_name: str) -> List[str]:
         records = self._records(collection_name)
         texts = [record["text"] for record in records]
-        embeddings = [self.embedding_client.embed(text) for text in texts]
+        embeddings = self.embedding_client.embed_many(texts)
         metadatas = [
             {
                 "source": record["source"],
@@ -136,7 +136,7 @@ class RAGPipeline:
                 metadatas.append(item)
                 source_counts[item["source"]] += 1
 
-        embeddings = [self.embedding_client.embed(text) for text in texts]
+        embeddings = self.embedding_client.embed_many(texts)
         self.store.add_documents(collection_name, texts, embeddings, metadatas=metadatas)
         return {
             "collection": collection_name,

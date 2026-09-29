@@ -337,21 +337,41 @@ No error banner is visible.
 
 ---
 
-# 5. Show the exact sources used
+# 5. Show the grounded answer
 
 ## SCREEN
 
 Move to **Knowledge response**.
 
-Show **Sources used** before focusing on the grounded answer.
+The bold **Grounded answer** is at the top of the response panel.
 
 ## SAY
 
-This is the transparency layer I care about.
+This is the grounded answer produced from the retrieved evidence.
+
+I keep the answer first because it is the fastest way to understand the result, but the evidence is directly underneath it so I can immediately verify what grounded it.
+
+## PAUSE
+
+Give the viewer enough time to read the first part of the answer.
+
+Do not read the whole answer word-for-word unless it is unusually short.
+
+---
+
+# 6. Show the exact sources used
+
+## SCREEN
+
+Move directly from the grounded answer to **Sources used** underneath it.
+
+## SAY
+
+This is the transparency layer.
 
 These are not generic citations added after the answer.
 
-This is the source set returned with the grounded query itself.
+This is the exact source set returned with the grounded query itself.
 
 For each source I can see the actual runbook or document name, the collection, the chunk, the retrieval distance, and the excerpt that was used.
 
@@ -365,9 +385,7 @@ Do not predict which files should appear. Read the live source names from the sc
 
 ## SAY
 
-So before I even look at the answer, I can inspect the evidence chain.
-
-That makes it much easier to understand what the system actually grounded itself on.
+So I get the answer quickly, and immediately underneath it I can inspect the evidence chain that produced it.
 
 ## PAUSE
 
@@ -376,28 +394,6 @@ Hold the source cards for two to three seconds.
 ## EXPECT
 
 The source count matches the source cards shown.
-
----
-
-# 6. Show the grounded answer
-
-## SCREEN
-
-Move from the source cards to the bold **Grounded answer** block.
-
-## SAY
-
-Now this is the grounded answer produced from that retrieved evidence.
-
-The important distinction is that I have already seen the sources that support it.
-
-I am not treating the generated answer as a black box.
-
-## PAUSE
-
-Give the viewer enough time to read the first part of the answer.
-
-Do not read the whole answer word-for-word unless it is unusually short.
 
 ---
 
@@ -588,9 +584,11 @@ Click:
 
 **Connect & index Downloads**
 
+The button should immediately change to a visible indexing state and remain disabled while the background job runs.
+
 ## SAY
 
-Now I am sending those normalized local documents through the same knowledge pipeline.
+Now I am sending those normalized local documents through the same knowledge pipeline. The browser is polling the indexing job rather than holding one long request open, so I can see that work is active even when a larger local folder takes time.
 
 ## SCREEN
 
