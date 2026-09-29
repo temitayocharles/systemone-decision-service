@@ -153,65 +153,437 @@ The viewer understands that System One is the product being demonstrated—not a
 
 ---
 
-# 2. Explain the stack to the viewer
+# 2. Walk through the repository architecture first
+
+The goal of this section is not to teach every line of code. It is to give a nontechnical viewer a mental map before opening the product UI.
 
 ## SCREEN
 
-Stay in the browser workspace.
+Open the repository/workspace tree.
 
-Scroll to **Knowledge provenance**.
+Keep the root folders visible.
 
-Keep the provider/inference area visible afterward if practical.
+Do not open secrets or the real .env file on camera.
 
 ## SAY
 
-Before I run anything, here is the stack at a high level.
+Before I use the interface, I want to show you how the system is organized.
 
-The browser workspace is the product surface.
+At the highest level there are two application services.
 
-Behind it are two main application services.
+One service is responsible for evidence.
 
-The first is the RAG evidence layer.
+The other service is responsible for decisions.
 
-Documents enter the system, they are broken into chunks, those chunks are converted into embeddings, and Chroma stores the vector representation so relevant evidence can be retrieved later.
+The evidence service is the RAG layer.
 
-In this local setup, Ollama provides the bundled local models. One model handles generation and local decision inference, while another produces embeddings.
+The decision service is System One itself.
 
-The second service is the System One Decision Runtime.
+That separation is deliberate.
 
-That is the decision layer.
+It means I can change where knowledge comes from without changing the decision contract, and I can change the decision provider without rebuilding the knowledge system.
 
-It receives state and typed questions, resolves an eligible inference instance, applies calibration when available, executes the decision, records telemetry, and returns a normalized result.
-
-The inference target is interchangeable. It can be the local Ollama instance, a hosted compatible endpoint, or another model running inside a cluster.
-
-Around the runtime are calibration profiles, benchmark records, and telemetry.
-
-Those are operational evidence used for calibrated probabilities, empirical routing, health-aware selection, and runtime inspection.
-
-So at a high level the flow is:
-
-documents become searchable evidence,
-
-evidence becomes a grounded answer,
-
-and System One turns the state and evidence into a structured decision.
+## 2A. corpora/ — the knowledge being supplied
 
 ## SCREEN
 
-Point to the Knowledge Provenance sequence:
+Open the corpora folder.
 
-**Source documents → Chunk → Embed → Chroma → Retrieved → Grounded answer → Decision**
+Show Engineering and Business.
+
+Open one short runbook and one of the longer runbooks just enough for the viewer to see that they are real documents with different lengths.
 
 ## SAY
 
-This provenance view is important.
+This is the raw knowledge I am feeding into the evidence layer.
 
-It shows the observable knowledge lineage.
+In an engineering organization these could be incident runbooks, operating procedures, maintenance manuals, recovery procedures, or standards of practice.
 
-It does not pretend that we can see hidden model reasoning.
+In a mechanical or manufacturing environment they could be equipment manuals, inspection procedures, safety practices, troubleshooting guides, or the material a new engineer might spend weeks learning before becoming productive.
 
-What we can see is where the knowledge came from, how it entered the system, what was retrieved, what grounded the answer, and what decision came out.
+In a corporate environment the same idea could apply to procurement procedures, vendor onboarding, finance controls, customer escalation procedures, HR policies, or service manuals.
+
+The important point is that this material already exists in organizations.
+
+System One does not require that knowledge to be rewritten into prompts by hand.
+
+The RAG layer makes the existing knowledge searchable.
+
+## 2B. rag/ — the evidence service
+
+## CLICK
+
+Open the rag folder, then rag/app.
+
+## SAY
+
+This directory contains the evidence service.
+
+Its job is not to make the final System One decision.
+
+Its job is to turn a large body of knowledge into a small set of relevant evidence for the question I am asking.
+
+### chunker.py
+
+## CLICK
+
+Open rag/app/chunker.py.
+
+## SAY
+
+The chunker breaks large documents into smaller overlapping passages.
+
+That matters because a long runbook could contain thousands of words, but a particular question may only need one or two sections.
+
+Instead of handing an entire manual to the model every time, the system creates manageable pieces that can be retrieved independently.
+
+### embeddings.py
+
+## CLICK
+
+Open rag/app/embeddings.py.
+
+## SAY
+
+The embedding layer converts each text chunk into numbers that represent its meaning.
+
+A simple way to think about that is a map of meaning.
+
+Two passages discussing similar ideas tend to land closer together on that map even when they do not use exactly the same words.
+
+When I ask a question, the question is embedded too.
+
+That allows the system to quickly find the chunks whose meaning is closest to the question.
+
+The embedding is not a rewritten version of the document. It is a numerical representation used for semantic search.
+
+### store.py
+
+## CLICK
+
+Open rag/app/store.py.
+
+## SAY
+
+The vector store is where those embeddings and their source metadata are kept.
+
+In this project that store is Chroma.
+
+The source filename, path, collection, chunk number, and other provenance stay attached so I can trace a retrieved passage back to the document it came from.
+
+### llm.py
+
+## CLICK
+
+Open rag/app/llm.py.
+
+## SAY
+
+Once the relevant evidence has been retrieved, the RAG service can ask the configured language model to produce a grounded answer from that evidence.
+
+That gives me readable context.
+
+But that is still not the final System One decision.
+
+### pipeline.py
+
+## CLICK
+
+Open rag/app/pipeline.py.
+
+## SAY
+
+The pipeline ties those pieces together.
+
+Document to chunks.
+
+Chunks to embeddings.
+
+Embeddings to storage.
+
+Question to retrieval.
+
+Retrieved evidence to a grounded answer.
+
+That is the evidence service.
+
+## 2C. eval/ — measured evidence about providers
+
+## CLICK
+
+Open the eval folder.
+
+Show benchmark_runtime.py and eval/data.
+
+## SAY
+
+This directory is different from the knowledge corpus.
+
+The corpus contains domain knowledge.
+
+The eval directory is where I measure the behavior of the decision providers themselves.
+
+A benchmark uses labelled examples where I already know the expected outcome.
+
+System One can run the same labelled workload against different provider-and-model combinations and record things such as accuracy, calibration error, latency, failure rate, and cost when cost information is available.
+
+The benchmark record also stores provenance such as the run ID, dataset hash, timestamp, and dataset path.
+
+That matters because I do not want System One choosing a model because somebody said it was good.
+
+I want the choice to be based on measured evidence from a known workload.
+
+The small dataset shipped with the repository is useful for exercising the benchmark pipeline.
+
+It is not enough evidence for me to make broad performance claims about one model being better than another.
+
+For a real comparison I would use a representative labelled dataset for the workload I actually care about.
+
+## 2D. decide/ — System One itself
+
+## CLICK
+
+Open the decide folder.
+
+## SAY
+
+This is the decision service.
+
+The evidence layer answers: what information is relevant?
+
+System One answers: given the state and that evidence, what structured decision should the application receive?
+
+### runtime_api.py
+
+## CLICK
+
+Open decide/runtime_api.py.
+
+## SAY
+
+This is the stable API surface.
+
+Applications send state and typed questions to System One.
+
+The request can use the configured default provider, explicitly select a provider, supply an empirical selection policy, or use an ensemble.
+
+The browser UI I will show in a moment is simply presenting these APIs in a way that is easier to follow.
+
+### providers/
+
+## CLICK
+
+Open decide/providers.
+
+## SAY
+
+Providers are configured as runtime resources rather than hardcoded into the application.
+
+That is why I can have a local model and a cloud model behind the same System One interface.
+
+The provider IDs, driver, endpoint, model, optional API key, timeout, concurrency, capabilities, and attributes come from configuration.
+
+I do not have to write new application logic every time I change an inference endpoint.
+
+For local development that configuration can come from environment variables.
+
+In a production environment, secret values should come from the platform's secret-management mechanism rather than being committed to source code.
+
+Do not show the real .env values on camera.
+
+### capabilities.py
+
+## CLICK
+
+Open decide/capabilities.py.
+
+## SAY
+
+Capabilities describe what a configured provider can actually do.
+
+For example, a decision workload may require token log probabilities or another feature.
+
+A provider that cannot satisfy the required capability should not be considered eligible merely because it is configured.
+
+### health.py
+
+## CLICK
+
+Open decide/health.py.
+
+## SAY
+
+Health uses observed runtime telemetry.
+
+If the latest observed request to a provider failed, a health-aware empirical policy can exclude it from selection.
+
+So configuration tells me what should exist.
+
+Telemetry tells me what has actually been happening.
+
+### selection.py
+
+## CLICK
+
+Open decide/selection.py.
+
+## SAY
+
+This is empirical selection.
+
+This is important, because empirical selection is not the same thing as simply using the default provider.
+
+When I supply a selection policy, System One looks at persisted benchmark records and filters the candidates.
+
+It can consider the task type, capabilities, observed health, calibration error, latency, cost, accuracy, and other constraints.
+
+Among the candidates that remain eligible, the current scoring combines measured accuracy, calibration quality, latency, cost, reliability, and the amount of sample support.
+
+So the easiest way to explain empirical selection is:
+
+do not choose the model by brand; choose among eligible models using evidence measured on the work that matters to you.
+
+If no provider has qualifying benchmark evidence, empirical selection fails closed. It does not invent a winner.
+
+### calibration_service.py
+
+## CLICK
+
+Open decide/calibration_service.py.
+
+## SAY
+
+Calibration answers a different question.
+
+Suppose a model says it is 90 percent confident many times.
+
+If outcomes show that those 90 percent predictions are only correct 65 percent of the time, then the raw confidence is overconfident.
+
+Calibration uses labelled outcomes to fit a correction so the reported probabilities better match observed reality.
+
+This implementation uses temperature-based calibration.
+
+The goal is not to make the model smarter.
+
+The goal is to make its probabilities more trustworthy.
+
+### calibration_profiles.py
+
+## CLICK
+
+Open decide/calibration_profiles.py.
+
+## SAY
+
+A calibration profile is stored for a specific provider, model, question type, and version.
+
+That means local Qwen and a cloud model do not have to share the same correction.
+
+Even choice, probability, and score questions can have separate profiles.
+
+### engine_v2.py
+
+## CLICK
+
+Open decide/engine_v2.py.
+
+## SAY
+
+This is the lower-level decision engine used by compatible providers.
+
+It turns the typed questions into model calls and converts model evidence into the normalized System One result.
+
+The important product contract remains the same even when the provider changes.
+
+### runtime.py
+
+## CLICK
+
+Open decide/runtime.py.
+
+## SAY
+
+The runtime is the orchestrator.
+
+It receives the request, resolves the routing mode, invokes the selected provider or providers, records telemetry, and returns the normalized answer.
+
+There are four routing ideas worth separating.
+
+Default means use the provider configured as the runtime default.
+
+Explicit means I choose a specific provider for this request.
+
+Empirical means System One chooses among benchmarked eligible candidates using the selection policy and measured evidence.
+
+Ensemble means more than one provider is invoked and the successful typed results are merged.
+
+Those are deliberately different modes.
+
+## 2E. tests/ — proving contracts before the demo
+
+## CLICK
+
+Open the tests folder.
+
+## SAY
+
+This directory contains the regression tests.
+
+I do not need to walk through every test on camera.
+
+The important point is that the API contract, provider routing, calibration, capability selection, provenance, batching, RAG behavior, and UI expectations are covered here.
+
+The live demo is not the first time these paths are exercised.
+
+## 2F. demo/ui/ — turn the endpoints into a product surface
+
+## CLICK
+
+Open demo/ui.
+
+Show serve_demo.py and system-one-demo-ui.html.
+
+## SAY
+
+Finally, this is the product-facing workspace.
+
+I could demonstrate the whole system with API calls in a terminal, but that would make the architecture harder to follow.
+
+So the UI collects the important endpoints into one place.
+
+It calls the ingest, provenance, retrieve, query, provider, benchmark, calibration, metrics, and decision endpoints.
+
+The local host adapter also lets me connect a read-only source such as my Downloads folder.
+
+Now that we have seen the architecture, I can move into the UI and every part of the screen should have a meaning.
+
+## 2G. Move from the repository into the live UI
+
+## SCREEN
+
+Switch to http://localhost:8080.
+
+Scroll to Knowledge provenance.
+
+## SAY
+
+This is the same architecture expressed as a live product.
+
+Source documents become chunks.
+
+Chunks become embeddings.
+
+Chroma stores them.
+
+A question retrieves the relevant evidence.
+
+The RAG layer produces a grounded answer.
+
+Then System One produces the typed decision.
+
+That provenance view is observable lineage.
+
+It does not claim that we can inspect hidden model reasoning.
 
 ## PAUSE
 
@@ -219,14 +591,7 @@ Hold the provenance graph for about three seconds.
 
 ## EXPECT
 
-The viewer understands:
-
-- UI = product surface
-- RAG = evidence layer
-- Chroma = vector store
-- Ollama or other compatible endpoints = inference resources
-- System One Runtime = decision layer
-- provenance = real observable lineage
+The viewer now has a mental model of both the repository and the UI before the first live question.
 
 ---
 
@@ -494,33 +859,221 @@ Hold the completed lineage for about three seconds.
 
 ---
 
-# 9. Show provider independence
+# 9. Demonstrate provider routing with the same evidence
 
 ## SCREEN
 
-Move to the **Inference** / provider cards.
+Move to the Inference section.
+
+Show the configured provider cards and the Decision routing control.
 
 ## SAY
 
-System One is not built around one provider or one model.
+Now I can demonstrate why provider independence matters.
 
-These inference instances are configured at deployment time.
+The providers you see here are not hardcoded into this page.
 
-In this setup I can have a local instance and a hosted instance behind the same System One contract.
+The UI reads the provider registry from System One.
 
-The application talks to System One.
+In my environment I have a local provider and I may also have a cloud provider configured.
 
-The provider and model behind it remain replaceable resources.
+I can keep the evidence exactly the same and change only the decision routing.
+
+That gives me a fair way to inspect how different providers behave on the same state and the same typed questions.
+
+## 9A. Default provider
+
+## CLICK
+
+Set Decision routing to Default provider.
+
+## SAY
+
+Default does not mean System One is benchmarking providers.
+
+It means use the provider configured as SYSTEMONE_DEFAULT_PROVIDER, or the first configured provider when no explicit default is set.
+
+This is the simplest production path when I already know which provider I want to use by default.
+
+## CLICK
+
+Run the same Engineering question if necessary.
 
 ## SCREEN
 
-Show the configured provider-instance names and models that are actually visible.
+Point to the result banner above the Decision card.
 
-Do not expose API keys.
+## SAY
+
+The result tells me which provider and model actually executed the request, the routing mode, and the measured latency for this live run.
+
+I am not hiding the fact that my local model can be slower on this Mac.
+
+That latency is part of the real execution evidence.
+
+## 9B. Explicit local provider
+
+## CLICK
+
+Open Decision routing and select the actual local provider shown by the UI.
+
+Do not use a scripted provider name if the UI reports a different ID.
+
+## SAY
+
+Now I am explicitly overriding the routing.
+
+For this request System One is not choosing.
+
+I am telling it to use this provider.
+
+That is useful for testing, certification, debugging, or workloads where an application has a hard provider requirement.
+
+## CLICK
+
+Run the same question.
 
 ## PAUSE
 
-Hold for one to two seconds.
+Show the provider/model, latency, probabilities, recommended path, actionable probability, and score.
+
+## 9C. Explicit cloud provider
+
+Only perform this beat if the cloud provider appears in the configured-provider list.
+
+## CLICK
+
+Choose the cloud provider from Decision routing.
+
+## SAY
+
+Now I am keeping the retrieved evidence and question structure the same, but moving the decision request to the cloud provider.
+
+Nothing in the application contract changes.
+
+The provider changed because of configuration.
+
+## CLICK
+
+Run the same question.
+
+## SCREEN
+
+Show the real result.
+
+## SAY
+
+The probabilities may be different.
+
+The recommended path may be different.
+
+The latency may be different.
+
+That is exactly what I want to observe.
+
+I am not caching a preferred answer and I am not forcing the providers to agree.
+
+This is live provider behavior.
+
+## 9D. Compare configured providers side by side
+
+## CLICK
+
+After a normal question has completed, click Compare providers.
+
+## SAY
+
+This comparison reuses the exact same grounded state and the same typed questions.
+
+System One explicitly invokes each configured provider and displays the real results side by side.
+
+That lets me compare the provider, model, latency, recommended path, actionable probability, and evidence score without changing the evidence between runs.
+
+## SCREEN
+
+Hold the provider comparison table.
+
+## SAY
+
+This table is an observation.
+
+It is not yet a benchmark.
+
+One question can show me that providers behave differently, but it is not enough data to conclude that one provider is generally better.
+
+That is what the benchmark system is for.
+
+## 9E. Empirical selection
+
+## SCREEN
+
+Show the Runtime evidence panel.
+
+Point to benchmark records.
+
+## SAY
+
+Empirical selection is where System One is allowed to choose based on measured evidence.
+
+But it can only do that when benchmark records actually exist.
+
+The benchmark workload contains labelled examples.
+
+Each provider is measured against the same representative task, and the persisted record can contain accuracy, expected calibration error, p95 latency, failure rate, cost when known, sample count, and provenance for the benchmark run.
+
+## CLICK
+
+Choose Empirical selection.
+
+## SAY
+
+With empirical routing, System One first filters out candidates that do not satisfy the policy.
+
+That can include the wrong task type, missing capabilities, unhealthy providers, excessive calibration error, excessive latency, excessive cost, or insufficient accuracy.
+
+Then it scores the eligible benchmarked candidates using measured accuracy, calibration quality, latency, cost, reliability, and sample support.
+
+If no candidate has qualifying evidence, System One fails closed.
+
+It does not silently pretend that it knows which provider is best.
+
+## EXPECT
+
+If representative benchmark records exist, the live request should return a route labelled Empirical selection.
+
+If no benchmark evidence exists yet, show the UI's honest message and explain that a real benchmark must be run first.
+
+Do not create or claim benchmark results just to make this beat succeed.
+
+## 9F. Ensemble
+
+Only perform this beat when at least two providers are configured and you want to show the merged behavior.
+
+## CLICK
+
+Choose Ensemble · all configured.
+
+## SAY
+
+Ensemble is different again.
+
+Instead of choosing one provider, System One invokes the configured providers and merges the successful typed results.
+
+For a choice question that means combining the probability distributions.
+
+For a probability question it averages the returned probabilities.
+
+For a score it averages the returned scores.
+
+The ensemble latency shown by the runtime reflects the slowest successful provider because they run concurrently.
+
+## CLICK
+
+Run the same question.
+
+## PAUSE
+
+Show the live merged decision.
 
 ---
 
@@ -726,27 +1279,63 @@ Keep the **read-only** local-source indicator visible if possible.
 
 ---
 
-# 15. Briefly explain calibration, benchmarks, and telemetry
+# 15. Bring benchmark evidence, calibration, and telemetry home
 
 ## SCREEN
 
-Stay in the product UI.
-
-There is no need to open Swagger unless you specifically want to show API contracts.
+Show the Runtime evidence panel.
 
 ## SAY
 
-Behind the decision runtime there are three important operational evidence layers.
+There are three ideas here that sound technical but solve very practical problems.
 
-Calibration profiles help make model-derived probabilities better aligned with labelled outcomes.
+Benchmarks ask: which configured provider has performed well on this kind of labelled work?
 
-Benchmark records let System One compare configured provider-and-model combinations on representative tasks.
+A benchmark is like giving several candidates the same exam where I already know the correct answers.
 
-Telemetry records what actually happened at runtime.
+One example is not enough.
 
-Those signals can be used for capability-aware, health-aware, and empirical routing.
+I need a representative set before I make a performance claim.
 
-I am not going to claim that one provider is better than another unless I have actually collected representative benchmark evidence for that workload.
+Calibration asks: when a provider says 80 percent, does 80 percent behave like 80 percent in reality?
+
+A model can rank the right answer well and still be overconfident or underconfident.
+
+Calibration uses labelled outcomes to correct the probability scale.
+
+Telemetry asks: what actually happened when the runtime was used?
+
+Which provider ran?
+
+Did it succeed?
+
+How long did it take?
+
+What usage did it report?
+
+Those observations also contribute to provider health.
+
+So I can summarize the three layers this way.
+
+Benchmark evidence helps System One compare providers.
+
+Calibration helps System One trust the probability scale.
+
+Telemetry tells System One what is happening in production.
+
+## SCREEN
+
+Point to the live counts for benchmark records, calibration profiles, and configured providers.
+
+## SAY
+
+These numbers are read from the runtime.
+
+If the benchmark count is zero, I say it is zero.
+
+If calibration has not been fitted, I say it has not been fitted.
+
+The interface should make missing evidence visible rather than filling the gap with a made-up result.
 
 ---
 
