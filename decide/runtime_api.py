@@ -6,6 +6,7 @@ import uvicorn
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel, Field, model_validator
 
+from .calibration_profiles import CalibrationProfileStore
 from .calibration_service import fit_profile, profile_dict
 from .runtime import DecisionRuntime
 from .selection import ModelStats, SelectionPolicy
@@ -130,6 +131,12 @@ async def benchmarks():
 async def put_benchmark(payload: BenchmarkRecord):
     runtime.benchmarks.upsert(ModelStats(**payload.model_dump()))
     return {"status": "ok"}
+
+
+@app.get("/v2/calibration/profiles")
+async def calibration_profiles():
+    profiles = CalibrationProfileStore().load().values()
+    return {"profiles": [profile_dict(profile) for profile in profiles]}
 
 
 @app.post("/v2/calibration/fit")
