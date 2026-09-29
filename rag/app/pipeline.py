@@ -76,6 +76,22 @@ class RAGPipeline:
                 "host": self.store.host,
                 "port": self.store.port,
             },
+            "stages": [
+                {"id": "documents", "label": "Source documents", "count": len(documents)},
+                {"id": "chunk", "label": "Chunk", "count": expected_chunks},
+                {
+                    "id": "embed",
+                    "label": "Embed",
+                    "provider": self.embedding_client.provider,
+                    "model": self.embedding_client.model,
+                },
+                {
+                    "id": "store",
+                    "label": "Store",
+                    "records": indexed_records,
+                    "backend": "Chroma",
+                },
+            ],
         }
 
     def ingest_collection(self, collection_name: str) -> List[str]:
@@ -155,9 +171,23 @@ class RAGPipeline:
 
         sources = []
         for rank, match in enumerate(matches, start=1):
-            source = dict(match)
-            source["rank"] = rank
-            sources.append(source)
+            sources.append(
+                {
+                    "rank": rank,
+                    "text": match.get("text"),
+                    "source": match.get("source"),
+                    "source_path": match.get("source_path"),
+                    "source_type": match.get("source_type"),
+                    "chunk_index": match.get("chunk_index"),
+                    "collection": match.get("collection") or collection_name,
+                    "distance": match.get("distance"),
+                    "extension": match.get("extension"),
+                    "mimetype": match.get("mimetype"),
+                    "size_bytes": match.get("size_bytes"),
+                    "modified_at": match.get("modified_at"),
+                    "content_mode": match.get("content_mode"),
+                }
+            )
 
         return {
             "answer": answer,
