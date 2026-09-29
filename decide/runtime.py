@@ -52,6 +52,7 @@ class DecisionRuntime:
                 **merged,
             }
 
+        selection_mode = "explicit" if provider is not None else "default"
         selected_provider = provider
         selected_model = model
         if selected_provider is None and policy is not None:
@@ -63,6 +64,7 @@ class DecisionRuntime:
             )
             selected_provider = selected.provider
             selected_model = selected.model
+            selection_mode = "empirical"
 
         selected_provider = selected_provider or self.default_provider
         if not selected_provider:
@@ -82,6 +84,7 @@ class DecisionRuntime:
             "request_id": rid,
             "route": {
                 "mode": "single",
+                "selection": selection_mode,
                 "provider": result.provider,
                 "model": result.model,
             },
